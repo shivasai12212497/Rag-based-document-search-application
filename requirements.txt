@@ -1,0 +1,9 @@
+streamlit
+langchain
+langchain-community
+langchain-huggingface
+transformers
+sentence-transformers
+faiss-cpu
+torch
+langchain-text-splitters
