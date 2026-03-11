@@ -1,5 +1,8 @@
+import os
+import uuid
+
+import requests
 import streamlit as st
-from rag_pipeline import load_rag_pipeline
 
 # ---------------- Page Config ----------------
 st.set_page_config(
@@ -292,44 +295,156 @@ st.markdown(
 
 st.markdown("")
 
+BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
+REQUEST_TIMEOUT_SECONDS = 180
+
+
+def _extract_backend_error(response):
+    try:
+        payload = response.json()
+    except ValueError:
+        return f"Backend request failed with status {response.status_code}."
+    return payload.get("error") or payload.get("message") or (
+        f"Backend request failed with status {response.status_code}."
+    )
+
+
+def get_backend_health():
+    try:
+        response = requests.get(
+            f"{BACKEND_URL}/health",
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        return False, str(exc)
+
+    if not response.ok:
+        return False, _extract_backend_error(response)
+
+    return True, response.json()
+
+
+def upload_documents(uploaded_files, session_id):
+    files = [
+        (
+            "files",
+            (uploaded_file.name, uploaded_file.getvalue(), "text/plain"),
+        )
+        for uploaded_file in uploaded_files
+    ]
+    data = {"session_id": session_id}
+
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/upload",
+            files=files,
+            data=data,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        return False, f"Upload request failed: {exc}"
+
+    if not response.ok:
+        return False, _extract_backend_error(response)
+
+    return True, response.json()
+
+
+def ask_question(question, session_id):
+    payload = {"question": question, "session_id": session_id}
+
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/ask",
+            json=payload,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        return False, f"Question request failed: {exc}"
+
+    if not response.ok:
+        return False, _extract_backend_error(response)
+
+    return True, response.json()
+
+
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+if "documents_ready" not in st.session_state:
+    st.session_state.documents_ready = False
+if "last_answer_payload" not in st.session_state:
+    st.session_state.last_answer_payload = None
+
+backend_ok, backend_info = get_backend_health()
+
 # ---------------- Sidebar ----------------
 st.sidebar.title("About This App")
 st.sidebar.markdown("<div class='pill'>DOCS MODE</div>", unsafe_allow_html=True)
 st.sidebar.markdown(
     """
     **Smart Document Search** uses:
-    - Semantic Search (Embeddings)
-    - Retrieval-Augmented Generation
+    - Streamlit Frontend
+    - Flask Backend API
     - FAISS Vector Database
-    - Local Large Language Model
+    - Retrieval-Augmented Generation
     """
 )
 st.sidebar.markdown("---")
-st.sidebar.info("Designed for private documents and enterprise search. :shield:")
-
-# ---------------- Load RAG Pipeline ----------------
-@st.cache_resource
-def load_pipeline():
-    return load_rag_pipeline()
-
-
-rag_chain = load_pipeline()
+st.sidebar.caption(f"Backend URL: {BACKEND_URL}")
+if backend_ok:
+    st.sidebar.success(
+        f"Backend connected (active sessions: {backend_info.get('active_sessions', 0)})"
+    )
+else:
+    st.sidebar.error(f"Backend unavailable: {backend_info}")
 
 # ---------------- Main Content ----------------
 left, right = st.columns([2, 1])
 
 with left:
     st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("Ask a Question :speech_balloon:")
-
-    if "query" not in st.session_state:
-        st.session_state.query = ""
-
-    query = st.text_input(
-        "Type your question",
-        key="query",
-        placeholder="Example: What is the data science lifecycle?",
+    st.subheader("1) Upload Documents")
+    uploaded_files = st.file_uploader(
+        "Upload text files",
+        type=["txt", "md", "csv", "log"],
+        accept_multiple_files=True,
+        help="Upload one or more text files to build your searchable knowledge base.",
     )
+
+    upload_clicked = st.button("Index Uploaded Files")
+    if upload_clicked:
+        if not uploaded_files:
+            st.warning("Please select at least one file.")
+        elif not backend_ok:
+            st.error("Backend is not reachable. Start Flask backend first.")
+        else:
+            with st.spinner("Uploading and indexing documents..."):
+                ok, payload = upload_documents(
+                    uploaded_files,
+                    st.session_state.session_id,
+                )
+            if ok:
+                st.session_state.session_id = payload.get(
+                    "session_id", st.session_state.session_id
+                )
+                st.session_state.documents_ready = True
+                st.session_state.last_answer_payload = None
+                indexed = payload.get("files_indexed", [])
+                st.success(
+                    f"Indexed {len(indexed)} file(s): {', '.join(indexed) if indexed else 'N/A'}"
+                )
+            else:
+                st.error(payload)
+
+    st.caption(f"Session ID: `{st.session_state.session_id}`")
+
+    st.subheader("2) Ask a Question :speech_balloon:")
+    with st.form("question_form", clear_on_submit=False):
+        query = st.text_input(
+            "Type your question",
+            placeholder="Example: What is the data science lifecycle?",
+        )
+        submit_question = st.form_submit_button("Generate Answer")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -338,22 +453,43 @@ with right:
     st.subheader("Quality Guardrails :white_check_mark:")
     st.markdown(
         """
-        Answers are generated only from retrieved document chunks.
-        If the answer is not present, the assistant will say it lacks information.
+        Upload files first, then ask document-grounded questions.
+        If the answer is not in your uploaded context, the assistant will say so.
         """
     )
-    st.markdown("<div class='callout'>Tip: Ask specific, document-based questions for best accuracy.</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='callout'>Tip: Upload clean, specific content and ask focused questions for better accuracy.</div>",
+        unsafe_allow_html=True,
+    )
     show_sources = st.checkbox("Show sources by default", value=True)
+    if st.session_state.documents_ready:
+        st.success("Documents are indexed and ready.")
+    else:
+        st.warning("No indexed documents yet.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("")
 
 # ---------------- Query Execution ----------------
-if query:
-    with st.spinner("Searching documents and generating answer..."):
-        result = rag_chain(query)
+if submit_question:
+    if not query.strip():
+        st.warning("Please enter a question.")
+    elif not st.session_state.documents_ready:
+        st.warning("Upload and index documents before asking questions.")
+    elif not backend_ok:
+        st.error("Backend is not reachable. Start Flask backend first.")
+    else:
+        with st.spinner("Searching uploaded documents and generating answer..."):
+            ok, payload = ask_question(query.strip(), st.session_state.session_id)
+        if ok:
+            st.session_state.last_answer_payload = payload
+        else:
+            st.session_state.last_answer_payload = None
+            st.error(payload)
 
-    sources = result.get("source_documents", [])
+result_payload = st.session_state.last_answer_payload
+if result_payload:
+    sources = result_payload.get("sources", [])
     has_sources = bool(sources)
 
     if show_sources:
@@ -368,23 +504,27 @@ if query:
                 "<div class='answer-title'>Answer found <span class='answer-badge'>RAG VERIFIED</span></div>",
                 unsafe_allow_html=True,
             )
-            st.caption(f"Matched {len(sources)} supporting chunks from your documents.")
+            st.caption(f"Matched {len(sources)} supporting chunks from your uploads.")
         else:
             st.markdown(
                 "<div class='answer-title'>No exact answer <span class='answer-badge'>LIMITED</span></div>",
                 unsafe_allow_html=True,
             )
-        st.write(result.get("result", ""))
+        st.write(result_payload.get("answer", ""))
         st.markdown("</div>", unsafe_allow_html=True)
 
     if show_sources:
         with tabs[1]:
             if sources:
-                for i, doc in enumerate(sources, start=1):
-                    st.markdown(f"<div class='source'><strong>Source {i}</strong><br>{doc.page_content}</div>", unsafe_allow_html=True)
+                for i, source in enumerate(sources, start=1):
+                    content = source.get("content", "")
+                    st.markdown(
+                        f"<div class='source'><strong>Source {i}</strong><br>{content}</div>",
+                        unsafe_allow_html=True,
+                    )
             else:
                 st.info("No sources to show for this answer.")
 
 # ---------------- Footer ----------------
 st.markdown("---")
-st.caption("Powered by RAG | Built with Streamlit and LangChain.")
+st.caption("Powered by Flask + Streamlit + RAG.")

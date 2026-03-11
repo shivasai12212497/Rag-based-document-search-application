@@ -1,5 +1,8 @@
 streamlit
+flask
+requests
 langchain
+langchain-core
 langchain-community
 langchain-huggingface
 transformers
