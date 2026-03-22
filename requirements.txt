@@ -4,9 +4,6 @@ requests
 langchain
 langchain-core
 langchain-community
-langchain-huggingface
-transformers
 sentence-transformers
 faiss-cpu
-torch
-langchain-text-splitters
+ollama

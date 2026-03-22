@@ -1,146 +1,168 @@
 import os
+import subprocess
 from functools import lru_cache
-from typing import Sequence
 
-# Force PyTorch-only Transformers usage to avoid TensorFlow/Keras runtime issues
-# on environments that have Keras 3 but not tf-keras.
-os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
-os.environ.setdefault("USE_TF", "0")
-
-from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_community.vectorstores.faiss import DistanceStrategy
-from transformers import pipeline
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.llms import Ollama
 
-VECTORSTORE_PATH = "vectorstore/faiss_index" #ASTRADB
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2" 
-LLM_MODEL = "google/flan-t5-small" #GROQAI
-DEFAULT_TOP_K = 5
-MIN_COSINE_SIMILARITY = 0.35
-MAX_NEW_TOKENS = 200
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
-DISTANCE_STRATEGY = DistanceStrategy.COSINE
-NORMALIZE_L2 = True
+# CONFIG 
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+CHUNK_SIZE = 120          
+CHUNK_OVERLAP = 20        
+OLLAMA_MODEL = "llama3.2:3b"
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL_FALLBACKS = (
+    "llama3",
+    "llama3.2:3b",
+    "gemma3:1b",
+)
 
-
+# ================= EMBEDDINGS =================
 @lru_cache(maxsize=1)
 def get_embeddings():
-    return HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL,
-        encode_kwargs={"normalize_embeddings": True},
-        query_encode_kwargs={"normalize_embeddings": True},
-    )
+    try:
+        return HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL,
+            encode_kwargs={"normalize_embeddings": True},
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Failed to load embedding model: {exc}") from exc
+
+
+# ================= LLM =================
+@lru_cache(maxsize=1)
+def _list_installed_ollama_models():
+    result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
+    installed = []
+    for line in result.stdout.splitlines()[1:]:
+        parts = line.split()
+        if parts:
+            installed.append(parts[0])
+    return installed
+
+
+def _resolve_ollama_model():
+    installed = _list_installed_ollama_models()
+
+    for model_name in (OLLAMA_MODEL, *OLLAMA_MODEL_FALLBACKS):
+        if model_name in installed:
+            return model_name
+
+    raise RuntimeError("No suitable Ollama model found")
 
 
 @lru_cache(maxsize=1)
 def get_llm():
-    hf_pipeline = pipeline(
-        "text2text-generation",
-        model=LLM_MODEL,
-        max_new_tokens=MAX_NEW_TOKENS,
-        do_sample=False,
-        temperature=0.0,
-        device=-1,
-    )
-    return HuggingFacePipeline(pipeline=hf_pipeline)
+    return Ollama(model=_resolve_ollama_model(), base_url=OLLAMA_BASE_URL)
 
 
-def split_documents(documents: Sequence[Document]):
-    if not documents:
-        return []
+def _invoke_llm(prompt: str) -> str:
+    llm = get_llm()
+    return llm.invoke(prompt[:3000])   # 🔥 prevent overload
+
+
+# ================= SPLITTING =================
+def split_documents(documents):
+    documents = [doc for doc in documents if doc.page_content.strip()]
+
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
+        chunk_overlap=CHUNK_OVERLAP
     )
-    return splitter.split_documents(list(documents))
+    return splitter.split_documents(documents)
 
 
-def build_vectorstore_from_documents(documents: Sequence[Document]):
+# ================= VECTORSTORE =================
+def build_vectorstore_from_documents(documents, session_id=None, reset_collection=False):
     chunks = split_documents(documents)
+
     if not chunks:
-        raise ValueError("No valid content found in uploaded files.")
-    embeddings = get_embeddings()
-    return FAISS.from_documents(
-        chunks,
-        embeddings,
-        distance_strategy=DISTANCE_STRATEGY,
-        normalize_L2=NORMALIZE_L2,
-    )
+        raise ValueError("No valid content found")
+
+    db = FAISS.from_documents(chunks, get_embeddings())
+    db.backend_name = "FAISS"
+    return db
 
 
-def load_vectorstore(vectorstore_path: str = VECTORSTORE_PATH):
-    embeddings = get_embeddings()
-    return FAISS.load_local(
-        vectorstore_path,
-        embeddings,
-        allow_dangerous_deserialization=True,
-        distance_strategy=DISTANCE_STRATEGY,
-        normalize_L2=NORMALIZE_L2,
-    )
+# ================= RAG =================
+def rag_answer(question, vectorstore, chat_history=None, top_k=3):
 
+    q = question.lower()
 
-def save_vectorstore(vectorstore, vectorstore_path: str = VECTORSTORE_PATH):
-    os.makedirs(os.path.dirname(vectorstore_path), exist_ok=True)
-    vectorstore.save_local(vectorstore_path)
-
-
-def build_prompt(question: str, context: str) -> str:
-    return (
-        "You are a careful assistant.\n"
-        "Answer ONLY using the context.\n"
-        "If the answer is not in the context, reply: "
-        "\"I don't have information about that.\"\n\n"
-        "Context:\n"
-        f"{context}\n\n"
-        f"Question: {question}\n"
-        "Answer:"
-    )
-
-
-def _cosine_similarity_from_l2_distance(distance: float) -> float:
-    # With normalized vectors, cosine similarity = 1 - (squared_l2_distance / 2)
-    similarity = 1.0 - (distance / 2.0)
-    return max(-1.0, min(1.0, similarity))
-
-
-def rag_answer(question: str, vectorstore, top_k: int = DEFAULT_TOP_K):
-    question = (question or "").strip()
-    if not question:
-        return {
-            "result": "Please enter a question.",
-            "source_documents": [],
-        }
-
-    scored = vectorstore.similarity_search_with_score(question, k=top_k)
-    docs = [
-        doc
-        for doc, distance in scored
-        if _cosine_similarity_from_l2_distance(distance) >= MIN_COSINE_SIMILARITY
-    ]
+    # 🔥 dynamic retrieval (VERY IMPORTANT)
+    if "highest" in q or "maximum" in q or "lowest" in q:
+        docs = vectorstore.similarity_search(question, k=15)
+    else:
+        docs = vectorstore.similarity_search(question, k=5)
 
     if not docs:
         return {
-            "result": "I couldn't find relevant information in the uploaded documents.",
-            "source_documents": [],
+            "result": "I couldn't find relevant information in the documents.",
+            "source_documents": []
         }
 
-    context = "\n\n".join(doc.page_content for doc in docs)
-    prompt = build_prompt(question, context)
-    answer = get_llm().invoke(prompt)
+    context = "\n\n".join([d.page_content for d in docs])
+
+    history_text = ""
+    if chat_history:
+        for turn in chat_history[-3:]:
+            history_text += f"User: {turn['question']}\nAssistant: {turn['answer']}\n"
+
+    # 🔥 IMPROVED PROMPT
+    prompt = f"""
+You are a data analyst.
+
+Carefully read ALL context and compare values before answering.
+
+If question asks for highest/lowest:
+→ Compare all entries before answering.
+
+If answer not found:
+→ Say "I don't have enough information in the documents."
+
+Conversation:
+{history_text}
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:
+"""
+
+    answer = _invoke_llm(prompt)
 
     return {
-        "result": answer,
-        "source_documents": docs,
+        "result": answer.strip(),
+        "source_documents": docs
     }
 
 
-def load_rag_pipeline(vectorstore_path: str = VECTORSTORE_PATH):
-    vectorstore = load_vectorstore(vectorstore_path)
+# ================= CHAT =================
+def chat_answer(question, chat_history=None):
+    history_text = ""
 
-    def answer(question: str):
-        return rag_answer(question, vectorstore)
+    if chat_history:
+        for turn in chat_history[-5:]:
+            history_text += f"User: {turn['question']}\nAssistant: {turn['answer']}\n"
 
-    return answer
+    prompt = f"""
+You are a helpful assistant.
+
+Conversation:
+{history_text}
+
+User: {question}
+Assistant:
+"""
+
+    answer = _invoke_llm(prompt)
+
+    return {
+        "result": answer.strip(),
+        "source_documents": []
+    }
