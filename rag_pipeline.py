@@ -1,5 +1,6 @@
 import os
 import subprocess
+import random
 from functools import lru_cache
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -22,51 +23,43 @@ OLLAMA_MODEL_FALLBACKS = (
 # ================= EMBEDDINGS =================
 @lru_cache(maxsize=1)
 def get_embeddings():
-    try:
-        return HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL,
-            encode_kwargs={"normalize_embeddings": True},
-        )
-    except Exception as exc:
-        raise RuntimeError(f"Failed to load embedding model: {exc}") from exc
+    return HuggingFaceEmbeddings(
+        model_name=EMBEDDING_MODEL,
+        encode_kwargs={"normalize_embeddings": True},
+    )
 
 
 # ================= LLM =================
 @lru_cache(maxsize=1)
 def _list_installed_ollama_models():
     result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
-    installed = []
-    for line in result.stdout.splitlines()[1:]:
-        parts = line.split()
-        if parts:
-            installed.append(parts[0])
-    return installed
+    return [line.split()[0] for line in result.stdout.splitlines()[1:] if line.split()]
 
 
 def _resolve_ollama_model():
     installed = _list_installed_ollama_models()
-
     for model_name in (OLLAMA_MODEL, *OLLAMA_MODEL_FALLBACKS):
         if model_name in installed:
             return model_name
-
     raise RuntimeError("No suitable Ollama model found")
 
 
 @lru_cache(maxsize=1)
 def get_llm():
-    return Ollama(model=_resolve_ollama_model(), base_url=OLLAMA_BASE_URL)
+    return Ollama(
+        model=_resolve_ollama_model(),
+        base_url=OLLAMA_BASE_URL,
+        temperature=0.7   
+    )
 
 
 def _invoke_llm(prompt: str) -> str:
-    llm = get_llm()
-    return llm.invoke(prompt[:3000])   # 🔥 prevent overload
+    return get_llm().invoke(prompt[:3000])
 
 
 # ================= SPLITTING =================
 def split_documents(documents):
     documents = [doc for doc in documents if doc.page_content.strip()]
-
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP
@@ -91,11 +84,11 @@ def rag_answer(question, vectorstore, chat_history=None, top_k=3):
 
     q = question.lower()
 
-    # 🔥 dynamic retrieval (VERY IMPORTANT)
-    if "highest" in q or "maximum" in q or "lowest" in q:
-        docs = vectorstore.similarity_search(question, k=15)
+    # 🔥 better retrieval
+    if any(x in q for x in ["highest", "maximum", "lowest", "compare"]):
+        docs = vectorstore.similarity_search(question, k=12)
     else:
-        docs = vectorstore.similarity_search(question, k=5)
+        docs = vectorstore.similarity_search(question, k=6)
 
     if not docs:
         return {
@@ -103,24 +96,32 @@ def rag_answer(question, vectorstore, chat_history=None, top_k=3):
             "source_documents": []
         }
 
+    # 🔥 shuffle → avoid repetition
+    random.shuffle(docs)
+
     context = "\n\n".join([d.page_content for d in docs])
 
+    # 🔥 reduce memory (avoid loops)
     history_text = ""
     if chat_history:
-        for turn in chat_history[-3:]:
+        for turn in chat_history[-2:]:
             history_text += f"User: {turn['question']}\nAssistant: {turn['answer']}\n"
 
-    # 🔥 IMPROVED PROMPT
     prompt = f"""
-You are a data analyst.
+You are a smart data assistant.
 
-Carefully read ALL context and compare values before answering.
+IMPORTANT:
+- Respond ONLY in the same language as the user's question.
+- Do NOT switch language.
+- Do NOT mix languages.
 
-If question asks for highest/lowest:
-→ Compare all entries before answering.
+- Read ALL context carefully
+- Do NOT repeat previous answers
+- Answer clearly and naturally
+- Compare values if needed
 
-If answer not found:
-→ Say "I don't have enough information in the documents."
+If answer is not in context:
+Say: "I don't have enough information in the documents."
 
 Conversation:
 {history_text}
@@ -144,14 +145,18 @@ Answer:
 
 # ================= CHAT =================
 def chat_answer(question, chat_history=None):
-    history_text = ""
 
+    history_text = ""
     if chat_history:
-        for turn in chat_history[-5:]:
+        for turn in chat_history[-2:]:   # 🔥 reduce memory loop
             history_text += f"User: {turn['question']}\nAssistant: {turn['answer']}\n"
 
     prompt = f"""
 You are a helpful assistant.
+
+- Give natural answers
+- Avoid repeating same sentences
+- Be concise and clear
 
 Conversation:
 {history_text}
