@@ -13,7 +13,7 @@ ALLOWED_TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".log", ".json"}
 DEFAULT_PORT = 8000
 MAX_SHORT_TERM_MEMORY_TURNS = 6
 DEFAULT_PASTED_TEXT_NAME = "pasted_text.txt"
-ASSISTANT_NAME = os.getenv("ASSISTANT_NAME", "Codex RAG Desk")
+ASSISTANT_NAME = os.getenv("ASSISTANT_NAME", "Shiva's Rag Application")
 
 app = Flask(__name__)
 _session_lock = threading.Lock()

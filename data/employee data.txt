@@ -1,0 +1,69 @@
+Employee ID: 101
+Name: Rajesh Kumar
+Salary: 75000
+Job Role: Software Engineer
+Department: IT
+Location: Hyderabad
+
+Employee ID: 102
+Name: Ananya Sharma
+Salary: 68000
+Job Role: Data Analyst
+Department: Analytics
+Location: Bangalore
+
+Employee ID: 103
+Name: Vivek Reddy
+Salary: 82000
+Job Role: Project Manager
+Department: Operations
+Location: Chennai
+
+Employee ID: 104
+Name: Sneha Gupta
+Salary: 72000
+Job Role: UI/UX Designer
+Department: Design
+Location: Pune
+
+Employee ID: 105
+Name: Arjun Mehta
+Salary: 90000
+Job Role: DevOps Engineer
+Department: IT
+Location: Mumbai
+
+Employee ID: 106
+Name: Kavya Nair
+Salary: 65000
+Job Role: HR Executive
+Department: Human Resources
+Location: Kochi
+
+Employee ID: 107
+Name: Rahul Verma
+Salary: 88000
+Job Role: Machine Learning Engineer
+Department: AI/ML
+Location: Delhi
+
+Employee ID: 108
+Name: Priya Singh
+Salary: 70000
+Job Role: Business Analyst
+Department: Strategy
+Location: Noida
+
+Employee ID: 109
+Name: Sandeep Patel
+Salary: 60000
+Job Role: Support Engineer
+Department: Customer Support
+Location: Ahmedabad
+
+Employee ID: 110
+Name: Neha Joshi
+Salary: 95000
+Job Role: Senior Software Engineer
+Department: IT
+Location: Hyderabad

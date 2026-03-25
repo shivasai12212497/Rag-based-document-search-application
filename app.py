@@ -7,7 +7,7 @@ import requests
 import streamlit as st
 
 st.set_page_config(
-    page_title="Codex RAG Desk",
+    page_title="Shiva's Rag Application",
     page_icon=":speech_balloon:",
     layout="wide",
 )
@@ -525,7 +525,7 @@ if "conversation" not in st.session_state:
 backend_ok, backend_info = get_backend_health()
 
 with st.sidebar:
-    st.title("Codex RAG Desk")
+    st.title("Shiva's Rag Application")
     st.caption("Chat first. Attach knowledge only when you need grounded answers.")
 
     if backend_ok:
@@ -685,9 +685,9 @@ if not st.session_state.conversation:
     st.markdown(
         """
         <div class="welcome-shell">
-            <div class="welcome-title">Start like ChatGPT, switch to RAG when needed.</div>
+            <div class="welcome-title">Start with a question. Bring your files when you want sharper answers.</div>
             <p class="welcome-text">
-                Ask normally in Normal Chat, or move to file and pasted-text modes when you want answers grounded in your own material.
+                Chat with me like you normally would. When you want answers based on your own notes, documents, or JSON, switch to Files or Pasted Text and I will use that context in the reply.
             </p>
         </div>
         """,
