@@ -1,4 +1,4 @@
-import html
+﻿import html
 import mimetypes
 import os
 import uuid
@@ -7,19 +7,15 @@ import requests
 import streamlit as st
 
 st.set_page_config(
-    page_title="Shiva's Rag Application",
-    page_icon=":speech_balloon:",
+    page_title="Shiva's RAG Studio",
+    page_icon="🎯",
     layout="wide",
 )
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
 REQUEST_TIMEOUT_SECONDS = 180
 SUPPORTED_UPLOAD_TYPES = ["txt", "md", "csv", "log", "json"]
-ASSISTANT_MODES = (
-    "Normal Chat",
-    "Ask From Files",
-    "Ask From Pasted Text",
-)
+ASSISTANT_MODES = ["Normal Chat", "Ask From Files", "Ask From Pasted Text"]
 MODE_DESCRIPTIONS = {
     "Normal Chat": "Direct assistant replies without retrieval.",
     "Ask From Files": "Ground answers in uploaded files for this session.",
@@ -31,293 +27,234 @@ INPUT_PLACEHOLDERS = {
     "Ask From Pasted Text": "Ask about the indexed pasted text...",
 }
 
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-    :root {
-        --bg: #f2efe8;
-        --panel: rgba(255, 255, 255, 0.82);
-        --panel-strong: rgba(255, 255, 255, 0.96);
-        --border: rgba(25, 27, 31, 0.08);
-        --ink: #15171b;
-        --muted: #646c77;
-        --accent: #0f6d7a;
-        --accent-soft: rgba(15, 109, 122, 0.1);
-        --user: #1b2733;
-        --user-ink: #f6f8fb;
-        --shadow: 0 18px 48px rgba(13, 18, 24, 0.08);
-    }
+def _inject_style():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-    .stApp {
-        background:
-            radial-gradient(900px 500px at 0% 0%, rgba(15, 109, 122, 0.08), transparent 50%),
-            radial-gradient(900px 500px at 100% 0%, rgba(201, 144, 63, 0.10), transparent 45%),
-            linear-gradient(180deg, #f6f3ee 0%, var(--bg) 100%);
-        color: var(--ink);
-        font-family: "Space Grotesk", sans-serif;
-    }
-
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, rgba(247, 244, 238, 0.95) 0%, rgba(239, 244, 245, 0.96) 100%);
-        border-right: 1px solid var(--border);
-    }
-
-    .block-container {
-        max-width: 1400px;
-        padding-top: 1.3rem;
-        padding-bottom: 6rem;
-    }
-
-    h1, h2, h3 {
-        letter-spacing: -0.03em;
-    }
-
-    .top-shell {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 18px;
-        padding: 20px 22px;
-        border-radius: 22px;
-        border: 1px solid var(--border);
-        background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(255,255,255,0.72) 100%);
-        box-shadow: var(--shadow);
-        margin-bottom: 1rem;
-    }
-
-    .top-title {
-        font-size: 32px;
-        font-weight: 700;
-        margin: 0 0 6px 0;
-    }
-
-    .top-subtitle {
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.55;
-        max-width: 780px;
-        margin: 0;
-    }
-
-    .mode-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        border-radius: 999px;
-        border: 1px solid rgba(15, 109, 122, 0.16);
-        background: var(--accent-soft);
-        color: var(--accent);
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        white-space: nowrap;
-    }
-
-    .summary-bar {
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.76);
-        box-shadow: var(--shadow);
-        border-radius: 18px;
-        padding: 14px 16px;
-        margin-bottom: 1rem;
-    }
-
-    .summary-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px;
-    }
-
-    .summary-card {
-        border-radius: 14px;
-        border: 1px solid var(--border);
-        background: var(--panel-strong);
-        padding: 12px 14px;
-    }
-
-    .summary-label {
-        font-size: 11px;
-        font-weight: 700;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.07em;
-        margin-bottom: 6px;
-    }
-
-    .summary-value {
-        font-size: 14px;
-        font-weight: 600;
-        line-height: 1.4;
-    }
-
-    .message-shell {
-        border-radius: 22px;
-        border: 1px solid var(--border);
-        box-shadow: var(--shadow);
-        padding: 14px 16px;
-        margin-bottom: 10px;
-        position: relative;
-    }
-
-    .assistant-shell {
-        background: var(--panel-strong);
-    }
-
-    .user-shell {
-        background: var(--user);
-        color: var(--user-ink);
-        border-color: rgba(255, 255, 255, 0.04);
-    }
-
-    .message-role {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 10px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.07em;
-        text-transform: uppercase;
-        margin-bottom: 10px;
-    }
-
-    .assistant-role {
-        color: var(--accent);
-        background: var(--accent-soft);
-    }
-
-    .user-role {
-        color: var(--user-ink);
-        background: rgba(255, 255, 255, 0.10);
-    }
-
-    .message-text {
-        font-size: 15px;
-        line-height: 1.7;
-        word-wrap: break-word;
-    }
-
-    .meta-shell {
-        border-radius: 18px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.78);
-        padding: 12px 14px;
-        box-shadow: var(--shadow);
-    }
-
-    .meta-label {
-        font-size: 11px;
-        color: var(--muted);
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.07em;
-        margin-bottom: 4px;
-    }
-
-    .meta-value {
-        font-size: 13px;
-        font-weight: 600;
-        margin-bottom: 10px;
-        line-height: 1.45;
-    }
-
-    .welcome-shell {
-        border-radius: 24px;
-        border: 1px solid var(--border);
-        background: linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(255,255,255,0.74) 100%);
-        box-shadow: var(--shadow);
-        padding: 26px 28px;
-        margin-top: 0.25rem;
-        margin-bottom: 1rem;
-    }
-
-    .welcome-title {
-        font-size: 28px;
-        font-weight: 700;
-        margin: 0 0 8px 0;
-    }
-
-    .welcome-text {
-        color: var(--muted);
-        font-size: 15px;
-        line-height: 1.6;
-        margin: 0;
-    }
-
-    .hint-card {
-        border-radius: 18px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.84);
-        padding: 16px 18px;
-        min-height: 124px;
-    }
-
-    .hint-title {
-        font-size: 13px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--accent);
-        margin-bottom: 8px;
-    }
-
-    .hint-body {
-        color: var(--ink);
-        font-size: 14px;
-        line-height: 1.55;
-    }
-
-    .stChatInputContainer {
-        background: rgba(246, 243, 238, 0.95);
-        border-top: 1px solid rgba(21, 23, 27, 0.06);
-    }
-
-    .stChatInput textarea {
-        border-radius: 18px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.92);
-        box-shadow: var(--shadow);
-    }
-
-    .stTextInput > div > div > input,
-    .stTextArea textarea {
-        border-radius: 14px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.92);
-    }
-
-    .stButton > button {
-        border-radius: 14px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.96);
-        color: var(--ink);
-        font-weight: 600;
-        min-height: 2.7rem;
-    }
-
-    .stButton > button:hover {
-        border-color: rgba(15, 109, 122, 0.4);
-        color: var(--accent);
-    }
-
-    @media (max-width: 1100px) {
-        .summary-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+        :root {
+            color-scheme: light;
+            font-family: 'Inter', sans-serif;
+            background: #eef2ff;
+            color: #111827;
         }
 
-        .top-shell {
-            flex-direction: column;
+        .stApp {
+            background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 60%, #ffffff 100%);
         }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+
+        .block-container {
+            padding: 1.5rem 2rem 2rem 2rem;
+            max-width: 1440px;
+        }
+
+        .page-header,
+        .section-card,
+        .hint-card,
+        .sidebar-card {
+            border-radius: 24px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+        }
+
+        .page-header {
+            padding: 28px;
+            margin-bottom: 22px;
+        }
+
+        .page-title {
+            margin: 0;
+            font-size: 2.6rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            color: #0f172a;
+        }
+
+        .page-subtitle {
+            margin: 0.85rem 0 0;
+            color: #475569;
+            line-height: 1.8;
+            max-width: 780px;
+            font-size: 1rem;
+        }
+
+        .tag-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.8rem 1rem;
+            border-radius: 999px;
+            background: rgba(79, 70, 229, 0.14);
+            color: #4338ca;
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .metric-row {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1rem;
+            margin-top: 1.25rem;
+        }
+
+        .metric-card {
+            padding: 1rem 1rem;
+            border-radius: 18px;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.06);
+            min-height: 100px;
+        }
+
+        .metric-label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .chat-message {
+            border-radius: 24px;
+            padding: 1.25rem 1.35rem;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            margin-bottom: 1rem;
+            background: #ffffff;
+        }
+
+        .chat-message.user {
+            border-left: 4px solid #4338ca;
+            background: rgba(67, 56, 202, 0.06);
+        }
+
+        .chat-message.assistant {
+            border-left: 4px solid #0f766e;
+            background: rgba(15, 118, 110, 0.06);
+        }
+
+        .chat-role {
+            font-size: 0.83rem;
+            font-weight: 700;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin-bottom: 0.75rem;
+        }
+
+        .chat-text {
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.75;
+            color: #1f2937;
+        }
+
+        .chat-badge-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7rem;
+            margin-top: 1rem;
+        }
+
+        .chat-badge {
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.05);
+            color: #475569;
+            font-size: 0.82rem;
+            padding: 0.68rem 0.9rem;
+        }
+
+        .hint-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .hint-card {
+            padding: 1.2rem;
+            border-radius: 20px;
+            background: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .hint-card h3 {
+            margin: 0 0 0.65rem;
+            font-size: 1rem;
+            color: #0f172a;
+        }
+
+        .hint-card p {
+            margin: 0;
+            color: #475569;
+            line-height: 1.8;
+            font-size: 0.95rem;
+        }
+
+        .sidebar-card {
+            padding: 1.1rem 1.15rem;
+            margin-bottom: 1rem;
+        }
+
+        .sidebar-card h4 {
+            margin: 0 0 0.75rem;
+            font-size: 1rem;
+            color: #0f172a;
+        }
+
+        .sidebar-note {
+            color: #64748b;
+            font-size: 0.92rem;
+            line-height: 1.7;
+        }
+
+        .stButton > button {
+            border-radius: 999px;
+            border: none;
+            background: linear-gradient(135deg, #4f46e5, #0f766e);
+            color: white;
+            font-weight: 700;
+            min-height: 3rem;
+        }
+
+        .stButton > button:hover {
+            transform: translateY(-1px);
+        }
+
+        .stTextArea textarea,
+        .stTextInput > div > div > input,
+        .stSelectbox > div > div,
+        .stFileUploader {
+            border-radius: 16px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            background: #ffffff;
+        }
+
+        @media (max-width: 1040px) {
+            .metric-row,
+            .hint-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .page-header,
+            .metric-row,
+            .hint-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _extract_backend_error(response):
@@ -344,26 +281,18 @@ def _summarize_sources(sources):
         return "No indexed source"
     if len(sources) == 1:
         return sources[0]
-
     preview = ", ".join(sources[:2])
     remaining = len(sources) - 2
-    if remaining > 0:
-        return f"{preview}, +{remaining} more"
-    return preview
+    return f"{preview}, +{remaining} more" if remaining else preview
 
 
 def get_backend_health():
     try:
-        response = requests.get(
-            f"{BACKEND_URL}/health",
-            timeout=10,
-        )
+        response = requests.get(f"{BACKEND_URL}/health", timeout=10)
     except requests.RequestException as exc:
         return False, str(exc)
-
     if not response.ok:
         return False, _extract_backend_error(response)
-
     return True, response.json()
 
 
@@ -380,36 +309,24 @@ def upload_knowledge(uploaded_files, session_id, text_content="", text_name="not
                 ),
             )
         )
-
     data = {"session_id": session_id}
     if text_content.strip():
         data["text_content"] = text_content
         data["text_name"] = text_name
-
-    request_kwargs = {
-        "data": data,
-        "timeout": REQUEST_TIMEOUT_SECONDS,
-    }
+    request_kwargs = {"data": data, "timeout": REQUEST_TIMEOUT_SECONDS}
     if files:
         request_kwargs["files"] = files
-
     try:
-        response = requests.post(
-            f"{BACKEND_URL}/upload",
-            **request_kwargs,
-        )
+        response = requests.post(f"{BACKEND_URL}/upload", **request_kwargs)
     except requests.RequestException as exc:
         return False, f"Upload request failed: {exc}"
-
     if not response.ok:
         return False, _extract_backend_error(response)
-
     return True, response.json()
 
 
 def ask_general_question(question, session_id):
     payload = {"question": question, "session_id": session_id}
-
     try:
         response = requests.post(
             f"{BACKEND_URL}/chat",
@@ -418,16 +335,13 @@ def ask_general_question(question, session_id):
         )
     except requests.RequestException as exc:
         return False, f"Chat request failed: {exc}"
-
     if not response.ok:
         return False, _extract_backend_error(response)
-
     return True, response.json()
 
 
 def ask_indexed_question(question, session_id):
     payload = {"question": question, "session_id": session_id}
-
     try:
         response = requests.post(
             f"{BACKEND_URL}/ask",
@@ -436,10 +350,8 @@ def ask_indexed_question(question, session_id):
         )
     except requests.RequestException as exc:
         return False, f"Question request failed: {exc}"
-
     if not response.ok:
         return False, _extract_backend_error(response)
-
     return True, response.json()
 
 
@@ -458,57 +370,48 @@ def render_turn(turn, show_sources):
     mode = html.escape(turn.get("mode", ""))
     backend = html.escape(turn.get("vector_backend") or "local")
     sources = turn.get("sources", [])
-
-    user_left, user_right = st.columns([1.3, 4], gap="small")
-    with user_right:
-        st.markdown(
-            f"""
-            <div class="message-shell user-shell">
-                <div class="message-role user-role">You</div>
-                <div class="message-text">{question}</div>
+    source_count = len(sources)
+    st.markdown(
+        f"""
+        <div class="chat-message user">
+            <div class="chat-role">You</div>
+            <div class="chat-text">{question}</div>
+            <div class="chat-badge-row">
+                <div class="chat-badge">Mode: {mode}</div>
+                <div class="chat-badge">Sources: {source_count}</div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    assistant_left, assistant_right = st.columns([4, 1.3], gap="small")
-    with assistant_left:
-        st.markdown(
-            f"""
-            <div class="message-shell assistant-shell">
-                <div class="message-role assistant-role">Assistant</div>
-                <div class="message-text">{answer}</div>
+        </div>
+        <div class="chat-message assistant">
+            <div class="chat-role">Assistant</div>
+            <div class="chat-text">{answer}</div>
+            <div class="chat-badge-row">
+                <div class="chat-badge">Backend: {backend}</div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if show_sources and sources:
-            with st.expander(f"Sources ({len(sources)})", expanded=False):
-                for index, source in enumerate(sources, start=1):
-                    metadata = source.get("metadata") or {}
-                    source_name = metadata.get("source", f"Source {index}")
-                    st.markdown(f"**{source_name}**")
-                    st.write(source.get("content", ""))
-
-    with assistant_right:
-        source_count = len(sources)
-        st.markdown(
-            f"""
-            <div class="meta-shell">
-                <div class="meta-label">Mode</div>
-                <div class="meta-value">{mode}</div>
-                <div class="meta-label">Backend</div>
-                <div class="meta-value">{backend}</div>
-                <div class="meta-label">Sources</div>
-                <div class="meta-value">{source_count}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if show_sources and sources:
+        for index, source in enumerate(sources, start=1):
+            metadata = source.get("metadata") or {}
+            source_name = metadata.get("source", f"Source {index}")
+            st.markdown(
+                f"""
+                <div class="section-card" style="margin-bottom: 1rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.9rem;">
+                        <div style="font-size:1rem;font-weight:700;color:#0f172a;">Source {index}</div>
+                        <div class="chat-badge">{html.escape(source_name)}</div>
+                    </div>
+                    <div style="color:#475569;line-height:1.7;font-size:0.95rem;">{html.escape(source.get('content', ''))}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
+    reset_session()
+
 if "assistant_mode" not in st.session_state:
     st.session_state.assistant_mode = ASSISTANT_MODES[0]
 if "knowledge_ready" not in st.session_state:
@@ -522,36 +425,43 @@ if "knowledge_sources" not in st.session_state:
 if "conversation" not in st.session_state:
     st.session_state.conversation = []
 
+_inject_style()
 backend_ok, backend_info = get_backend_health()
 
 with st.sidebar:
-    st.title("Shiva's Rag Application")
-    st.caption("Chat first. Attach knowledge only when you need grounded answers.")
+    st.markdown(
+        """
+        <div class="sidebar-card">
+            <h4>Session controls</h4>
+            <p class="sidebar-note">Choose your mode, attach knowledge if needed, and start the conversation below.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if backend_ok:
-        st.success(
-            f"Backend connected | active sessions: {backend_info.get('active_sessions', 0)}"
-        )
+        st.success(f"Backend online • active sessions: {backend_info.get('active_sessions', 0)}")
     else:
         st.error(f"Backend unavailable: {backend_info}")
 
-    st.caption(f"Session: `{st.session_state.session_id[:8]}`")
-
-    st.radio(
-        "Conversation mode",
-        ASSISTANT_MODES,
-        key="assistant_mode",
-    )
+    st.caption(f"Session: {st.session_state.session_id[:8]}...")
+    st.radio("Conversation mode", ASSISTANT_MODES, key="assistant_mode")
     st.caption(MODE_DESCRIPTIONS[st.session_state.assistant_mode])
-
     show_sources = st.checkbox("Show retrieved sources", value=True)
 
-    if st.button("New Session", use_container_width=True):
+    if st.button("New session", use_container_width=True):
         reset_session()
-        st.rerun()
 
     st.markdown("---")
-    st.subheader("Knowledge")
+    st.markdown(
+        """
+        <div class="sidebar-card">
+            <h4>Knowledge builder</h4>
+            <p class="sidebar-note">Upload files or paste text here for grounded answers when using the selected mode.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if st.session_state.assistant_mode == "Ask From Files":
         uploaded_files = st.file_uploader(
@@ -560,22 +470,17 @@ with st.sidebar:
             accept_multiple_files=True,
             help="Supported formats: txt, md, csv, log, json",
         )
-        if st.button("Index Files", use_container_width=True):
+        if st.button("Index files", use_container_width=True):
             if not uploaded_files:
                 st.warning("Select at least one file before indexing.")
             elif not backend_ok:
                 st.error("Backend is not reachable.")
             else:
                 with st.spinner("Indexing files..."):
-                    ok, payload = upload_knowledge(
-                        uploaded_files,
-                        st.session_state.session_id,
-                    )
+                    ok, payload = upload_knowledge(uploaded_files, st.session_state.session_id)
                 if ok:
                     indexed = payload.get("files_indexed", [])
-                    st.session_state.session_id = payload.get(
-                        "session_id", st.session_state.session_id
-                    )
+                    st.session_state.session_id = payload.get("session_id", st.session_state.session_id)
                     st.session_state.knowledge_ready = True
                     st.session_state.knowledge_sources = indexed
                     st.session_state.knowledge_label = _summarize_sources(indexed)
@@ -584,34 +489,19 @@ with st.sidebar:
                 else:
                     st.error(payload)
     elif st.session_state.assistant_mode == "Ask From Pasted Text":
-        text_name = st.text_input(
-            "Text name",
-            value="notes.txt",
-            help="Use a .json name when the pasted content is JSON.",
-        )
-        pasted_text = st.text_area(
-            "Paste source text",
-            height=220,
-            placeholder="Paste notes, article text, meeting transcript, or JSON here.",
-        )
-        if st.button("Index Pasted Text", use_container_width=True):
+        text_name = st.text_input("Text name", value="notes.txt", help="Use a .json name when pasting JSON.")
+        pasted_text = st.text_area("Paste source text", height=220, placeholder="Paste notes or JSON here.")
+        if st.button("Index pasted text", use_container_width=True):
             if not pasted_text.strip():
                 st.warning("Paste some text before indexing.")
             elif not backend_ok:
                 st.error("Backend is not reachable.")
             else:
                 with st.spinner("Indexing pasted text..."):
-                    ok, payload = upload_knowledge(
-                        [],
-                        st.session_state.session_id,
-                        text_content=pasted_text,
-                        text_name=text_name,
-                    )
+                    ok, payload = upload_knowledge([], st.session_state.session_id, text_content=pasted_text, text_name=text_name)
                 if ok:
                     indexed = payload.get("files_indexed", [])
-                    st.session_state.session_id = payload.get(
-                        "session_id", st.session_state.session_id
-                    )
+                    st.session_state.session_id = payload.get("session_id", st.session_state.session_id)
                     st.session_state.knowledge_ready = True
                     st.session_state.knowledge_sources = indexed
                     st.session_state.knowledge_label = _summarize_sources(indexed)
@@ -623,16 +513,15 @@ with st.sidebar:
         st.info("Normal Chat does not require indexing.")
 
     if st.session_state.knowledge_ready:
-        st.success(f"Ready: {st.session_state.knowledge_label}")
+        st.success(f"Knowledge attached: {st.session_state.knowledge_label}")
         if st.session_state.knowledge_backend:
             st.caption(f"Index backend: {st.session_state.knowledge_backend}")
     else:
         st.caption("No indexed knowledge attached to this session.")
 
     st.markdown("---")
-    st.caption("Supported upload formats: txt, md, csv, log, json")
-    st.caption("The first response can still be slower while the model loads.")
-
+    st.caption("Supported formats: txt, md, csv, log, json")
+    st.caption("First response may take longer while the backend warms up.")
 
 current_mode = st.session_state.assistant_mode
 knowledge_state = "Ready" if st.session_state.knowledge_ready else "Not indexed"
@@ -641,137 +530,109 @@ model_mode_text = html.escape(current_mode)
 
 st.markdown(
     f"""
-    <div class="top-shell">
-        <div>
-            <div class="top-title">Conversation Workspace</div>
-            <p class="top-subtitle">
-                This layout is chat-first. Keep talking in the main lane, and use the sidebar as your workspace for
-                files, pasted text, and session control.
-            </p>
+    <div class="page-header">
+        <div style="display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; align-items:start;">
+            <div>
+                <h1 class="page-title">Shiva's RAG Studio</h1>
+                <p class="page-subtitle">A cleaner knowledge chat interface built for fast, grounded responses. Attach files or paste text only when you need stronger quotes and references.</p>
+            </div>
+            <div class="tag-pill">Smart chat with knowledge support</div>
         </div>
-        <div class="mode-pill">{model_mode_text}</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    f"""
-    <div class="summary-bar">
-        <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-label">Mode</div>
-                <div class="summary-value">{model_mode_text}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">Knowledge</div>
-                <div class="summary-value">{knowledge_state}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">Indexed Source</div>
-                <div class="summary-value">{source_summary}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">Backend</div>
-                <div class="summary-value">{html.escape(BACKEND_URL)}</div>
-            </div>
+        <div class="metric-row">
+            <div class="metric-card"><div class="metric-label">Mode</div><div class="metric-value">{model_mode_text}</div></div>
+            <div class="metric-card"><div class="metric-label">Knowledge</div><div class="metric-value">{knowledge_state}</div></div>
+            <div class="metric-card"><div class="metric-label">Indexed source</div><div class="metric-value">{source_summary}</div></div>
+            <div class="metric-card"><div class="metric-label">Backend</div><div class="metric-value">{html.escape(BACKEND_URL)}</div></div>
         </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-if not st.session_state.conversation:
+main_col, side_col = st.columns([3, 1], gap="large")
+
+with main_col:
+    conversation_placeholder = st.container()
+    with conversation_placeholder:
+        if not st.session_state.conversation:
+            st.markdown(
+                """
+                <div class="section-card">
+                    <h3 style="margin:0 0 0.75rem; color:#0f172a;">Ready to ask your first question</h3>
+                    <p style="margin:0; color:#475569; line-height:1.8;">Choose a mode, attach knowledge if needed, then ask your question using the chat box below. The assistant will keep the conversation flowing in the main pane.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                """
+                <div class="hint-grid">
+                    <div class="hint-card"><h3>Normal Chat</h3><p>Use this for general questions, brainstorming, and everyday prompts without indexing anything.</p></div>
+                    <div class="hint-card"><h3>Ask From Files</h3><p>Upload your documents to ground answers in your own reports, notes, and CSV content.</p></div>
+                    <div class="hint-card"><h3>Ask From Pasted Text</h3><p>Paste raw notes, meeting text, or JSON for a quick knowledge grounding workflow.</p></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            for turn in st.session_state.conversation:
+                render_turn(turn, show_sources=show_sources)
+
+    st.markdown("<div style='margin: 16px 0;'></div>", unsafe_allow_html=True)
+
+    user_prompt = st.chat_input(
+        INPUT_PLACEHOLDERS[current_mode],
+        disabled=not backend_ok or (current_mode != "Normal Chat" and not st.session_state.knowledge_ready),
+    )
+
+    if user_prompt:
+        request_fn = ask_general_question if current_mode == "Normal Chat" else ask_indexed_question
+        spinner_text = "Generating response..." if current_mode == "Normal Chat" else "Searching indexed knowledge..."
+        with st.spinner(spinner_text):
+            ok, payload = request_fn(user_prompt.strip(), st.session_state.session_id)
+        if ok:
+            st.session_state.session_id = payload.get("session_id", st.session_state.session_id)
+            st.session_state.conversation.append(
+                {
+                    "mode": current_mode,
+                    "question": user_prompt.strip(),
+                    "answer": payload.get("answer", ""),
+                    "sources": payload.get("sources", []),
+                    "vector_backend": payload.get("vector_backend"),
+                }
+            )
+            conversation_placeholder.empty()
+            with conversation_placeholder:
+                for turn in st.session_state.conversation:
+                    render_turn(turn, show_sources=show_sources)
+        else:
+            st.error(payload)
+
+with side_col:
     st.markdown(
         """
-        <div class="welcome-shell">
-            <div class="welcome-title">Start with a question. Bring your files when you want sharper answers.</div>
-            <p class="welcome-text">
-                Chat with me like you normally would. When you want answers based on your own notes, documents, or JSON, switch to Files or Pasted Text and I will use that context in the reply.
-            </p>
+        <div class="sidebar-card">
+            <h4>Quick actions</h4>
+            <p class="sidebar-note">Switch modes and index knowledge here. Keep the conversation focused in the main pane.</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    hint_one, hint_two, hint_three = st.columns(3)
-    with hint_one:
-        st.markdown(
-            """
-            <div class="hint-card">
-                <div class="hint-title">Normal Chat</div>
-                <div class="hint-body">
-                    Use this for general questions, brainstorming, and quick back-and-forth without indexing anything.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with hint_two:
-        st.markdown(
-            """
-            <div class="hint-card">
-                <div class="hint-title">Files</div>
-                <div class="hint-body">
-                    Upload txt, md, csv, log, or json files in the sidebar and ask grounded questions from them.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with hint_three:
-        st.markdown(
-            """
-            <div class="hint-card">
-                <div class="hint-title">Pasted Text</div>
-                <div class="hint-body">
-                    Paste notes or raw JSON in the sidebar when you want quick grounding without saving a file first.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-else:
-    for turn in st.session_state.conversation:
-        render_turn(turn, show_sources=show_sources)
-
-input_disabled = not backend_ok
-if current_mode != "Normal Chat" and not st.session_state.knowledge_ready:
-    input_disabled = True
+    st.markdown(
+        """
+        <div class="sidebar-card">
+            <h4>Tips</h4>
+            <ul style="margin:0; padding-left:1.2rem; color:#475569;">
+                <li>Keep questions clear and concise.</li>
+                <li>Use files for documents that should be referenced directly.</li>
+                <li>Paste text for quick one-off knowledge checks.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 if not backend_ok:
-    st.error("Backend is not reachable. Start Flask first.")
+    st.error("Backend is not reachable. Start the backend service before using the app.")
 elif current_mode != "Normal Chat" and not st.session_state.knowledge_ready:
-    st.info("Index files or pasted text in the sidebar before sending a grounded question.")
-
-user_prompt = st.chat_input(
-    INPUT_PLACEHOLDERS[current_mode],
-    disabled=input_disabled,
-)
-
-if user_prompt:
-    if current_mode == "Normal Chat":
-        request_fn = ask_general_question
-        spinner_text = "Generating response..."
-    else:
-        request_fn = ask_indexed_question
-        spinner_text = "Searching indexed knowledge..."
-
-    with st.spinner(spinner_text):
-        ok, payload = request_fn(user_prompt.strip(), st.session_state.session_id)
-
-    if ok:
-        st.session_state.session_id = payload.get(
-            "session_id", st.session_state.session_id
-        )
-        st.session_state.conversation.append(
-            {
-                "mode": current_mode,
-                "question": user_prompt.strip(),
-                "answer": payload.get("answer", ""),
-                "sources": payload.get("sources", []),
-                "vector_backend": payload.get("vector_backend"),
-            }
-        )
-        st.rerun()
-    else:
-        st.error(payload)
+    st.info("Index files or pasted text in the sidebar before asking a grounded question.")
