@@ -56,6 +56,10 @@ def _sanitize_answer(answer: str) -> str:
     lines = [line for line in answer.splitlines() if not line.strip().startswith("Role:")]
     return "\n".join(lines).strip()
 
+
+def remove_confidence(answer: str) -> str:
+    return _sanitize_answer(answer)
+
 # ================= QUERY EXPANSION =================
 def expand_query(query: str):
     mapping = {

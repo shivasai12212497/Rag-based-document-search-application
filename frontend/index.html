@@ -1,59 +1,158 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RAG Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
     <div class="container">
+
+      <!-- ══ Sidebar ══ -->
       <aside class="sidebar">
-        <div class="brand">
-          <span class="brand-icon">🤖</span>
-          <div>
-            <h1>RAG Assistant</h1>
-            <p>ChatGPT-style RAG interface</p>
+        <div class="sidebar-inner">
+
+          <!-- Brand -->
+          <div class="brand">
+            <div class="brand-icon">
+              <!-- Sparkle / AI icon -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+              </svg>
+            </div>
+            <div class="brand-text">
+              <h1>RAG Assistant</h1>
+              <p>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                Retrieval-augmented chat
+              </p>
+            </div>
+
+            <!-- Theme toggle -->
+            <button class="theme-toggle" id="theme-toggle" title="Toggle light / dark mode" aria-label="Toggle theme">
+              <!-- Sun pill -->
+              <div class="theme-toggle-pill light-pill" id="light-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+              </div>
+              <!-- Moon pill -->
+              <div class="theme-toggle-pill dark-pill active" id="dark-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                </svg>
+              </div>
+            </button>
+          </div>
+
+          <!-- Mode -->
+          <div class="panel">
+            <span class="panel-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Mode
+            </span>
+            <select id="mode-select">
+              <option value="normal">💬  Normal Chat</option>
+              <option value="files">📁  Ask From Files</option>
+              <option value="pasted">📋  Ask From Pasted Text</option>
+            </select>
+            <p id="mode-info" class="mode-info">Normal Chat: no retrieval, direct LLM response (quick answers, may hallucinate).</p>
+          </div>
+
+          <!-- File Upload -->
+          <div id="file-section" class="panel">
+            <span class="panel-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              Upload Documents
+            </span>
+            <input id="file-uploader" type="file" multiple accept=".txt,.md,.csv,.log,.json" />
+            <button id="index-files-btn" class="btn secondary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Index files
+            </button>
+          </div>
+
+          <!-- Paste Text -->
+          <div id="paste-section" class="panel hidden">
+            <span class="panel-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+              Paste Text / JSON
+            </span>
+            <textarea id="paste-content" rows="5" placeholder="Paste your document content here…"></textarea>
+            <input id="paste-name" type="text" placeholder="notes.txt" value="notes.txt" />
+            <button id="index-paste-btn" class="btn secondary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
+              Index pasted content
+            </button>
+          </div>
+
+          <!-- Status -->
+          <div class="status-panel">
+            <button id="clear-history-btn" class="btn danger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+              Clear history
+            </button>
+
+            <div class="status-row">
+              <span>
+                <span class="status-dot" id="status-dot"></span>Backend
+              </span>
+              <span id="backend-status">checking…</span>
+            </div>
+
+            <div class="status-row">
+              <span id="session-id">Session: --</span>
+            </div>
+
+            <p id="processing-status" class="processing-status"></p>
+          </div>
+
+        </div><!-- /sidebar-inner -->
+      </aside>
+
+      <!-- ══ Chat ══ -->
+      <main class="chat-area">
+
+        <div class="chat-header">
+          <div class="chat-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            </svg>
+          </div>
+          <span class="chat-header-title">Conversation</span>
+          <span class="chat-header-badge" id="header-mode-label">Normal Chat</span>
+          <div class="chat-header-right">
+            <span class="chat-header-sub" id="msg-count">0 messages</span>
           </div>
         </div>
 
-        <div class="panel">
-          <label>Mode</label>
-          <select id="mode-select">
-            <option value="normal">Normal Chat</option>
-            <option value="files">Ask From Files</option>
-            <option value="pasted">Ask From Pasted Text</option>
-          </select>
-          <p id="mode-info" class="mode-info">Normal Chat: no retrieval, direct LLM responses.</p>
+        <div id="message-list" class="message-list">
+          <div class="empty-state" id="empty-state">
+            <div class="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+            </div>
+            <p>Choose a mode in the sidebar, then ask any question to get started.</p>
+          </div>
         </div>
 
-        <div id="file-section" class="panel">
-          <label>Upload documents</label>
-          <input id="file-uploader" type="file" multiple accept=".txt,.md,.csv,.log,.json" />
-          <button id="index-files-btn" class="btn secondary">Index files</button>
-        </div>
-
-        <div id="paste-section" class="panel hidden">
-          <label>Paste text/JSON</label>
-          <textarea id="paste-content" rows="6" placeholder="Paste your document content here"></textarea>
-          <input id="paste-name" type="text" placeholder="notes.txt" value="notes.txt" />
-          <button id="index-paste-btn" class="btn secondary">Index pasted content</button>
-        </div>
-
-        <div class="panel status-panel">
-          <button id="clear-history-btn" class="btn danger">Clear history</button>
-          <p>Status: <strong id="backend-status">checking...</strong></p>
-          <p><span id="session-id">Session: --</span></p>
-          <p id="processing-status" class="processing-status"></p>
-        </div>
-      </aside>
-
-      <main class="chat-area">
-        <div id="message-list" class="message-list"></div>
         <form id="prompt-form" class="prompt-form">
-          <textarea id="prompt-text" rows="3" placeholder="Ask a question..."></textarea>
-          <button type="submit" class="btn primary">Send</button>
+          <textarea id="prompt-text" rows="2" placeholder="Ask a question… (Enter to send, Shift+Enter for new line)"></textarea>
+          <button type="submit" class="btn primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+            Send
+          </button>
         </form>
+
       </main>
     </div>
 
