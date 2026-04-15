@@ -67,3 +67,143 @@ Salary: 95000
 Job Role: Senior Software Engineer
 Department: IT
 Location: Hyderabad
+
+Employee ID: 111
+Name: Karan Malhotra
+Salary: 78000
+Job Role: Backend Developer
+Department: IT
+Location: Gurgaon
+
+Employee ID: 112
+Name: Meera Iyer
+Salary: 67000
+Job Role: Data Scientist
+Department: AI/ML
+Location: Bangalore
+
+Employee ID: 113
+Name: Rohit Agarwal
+Salary: 83000
+Job Role: Product Manager
+Department: Product
+Location: Mumbai
+
+Employee ID: 114
+Name: Pooja Bansal
+Salary: 71000
+Job Role: QA Engineer
+Department: Testing
+Location: Noida
+
+Employee ID: 115
+Name: Nikhil Chatterjee
+Salary: 92000
+Job Role: Cloud Architect
+Department: IT
+Location: Kolkata
+
+Employee ID: 116
+Name: Aditi Deshmukh
+Salary: 64000
+Job Role: HR Manager
+Department: Human Resources
+Location: Pune
+
+Employee ID: 117
+Name: Varun Khanna
+Salary: 86000
+Job Role: Full Stack Developer
+Department: IT
+Location: Delhi
+
+Employee ID: 118
+Name: Ritu Saxena
+Salary: 69000
+Job Role: Financial Analyst
+Department: Finance
+Location: Jaipur
+
+Employee ID: 119
+Name: Deepak Yadav
+Salary: 61000
+Job Role: Network Engineer
+Department: IT
+Location: Lucknow
+
+Employee ID: 120
+Name: Shreya Pillai
+Salary: 94000
+Job Role: Senior Data Scientist
+Department: AI/ML
+Location: Chennai
+
+Employee ID: 121
+Name: Manish Tiwari
+Salary: 77000
+Job Role: System Administrator
+Department: IT
+Location: Bhopal
+
+Employee ID: 122
+Name: Alisha Khan
+Salary: 68000
+Job Role: Marketing Specialist
+Department: Marketing
+Location: Delhi
+
+Employee ID: 123
+Name: Gaurav Sharma
+Salary: 85000
+Job Role: Technical Lead
+Department: IT
+Location: Chandigarh
+
+Employee ID: 124
+Name: Tanvi Kapoor
+Salary: 73000
+Job Role: Content Strategist
+Department: Marketing
+Location: Mumbai
+
+Employee ID: 125
+Name: Harsh Vardhan
+Salary: 91000
+Job Role: Security Engineer
+Department: Cybersecurity
+Location: Hyderabad
+
+Employee ID: 126
+Name: Isha Arora
+Salary: 66000
+Job Role: Recruiter
+Department: Human Resources
+Location: Gurgaon
+
+Employee ID: 127
+Name: Abhishek Mishra
+Salary: 88000
+Job Role: Data Engineer
+Department: Data Engineering
+Location: Bangalore
+
+Employee ID: 128
+Name: Komal Jain
+Salary: 70000
+Job Role: UX Researcher
+Department: Design
+Location: Pune
+
+Employee ID: 129
+Name: Yash Thakur
+Salary: 62000
+Job Role: IT Support Specialist
+Department: Customer Support
+Location: Indore
+
+Employee ID: 130
+Name: Swati Kulkarni
+Salary: 96000
+Job Role: Engineering Manager
+Department: IT
+Location: Mumbai

@@ -1,0 +1,399 @@
+Student ID: 201
+Name: Aarav Sharma
+Marks: 78
+Course: Computer Science
+Year: 2
+Age: 20
+City: Delhi
+
+Student ID: 202
+Name: Diya Patel
+Marks: 85
+Course: Information Technology
+Year: 3
+Age: 21
+City: Ahmedabad
+
+Student ID: 203
+Name: Rohan Gupta
+Marks: 72
+Course: Electronics
+Year: 1
+Age: 19
+City: Lucknow
+
+Student ID: 204
+Name: Anika Reddy
+Marks: 88
+Course: Mechanical Engineering
+Year: 4
+Age: 22
+City: Hyderabad
+
+Student ID: 205
+Name: Kunal Verma
+Marks: 69
+Course: Civil Engineering
+Year: 2
+Age: 20
+City: Jaipur
+
+Student ID: 206
+Name: Mehak Singh
+Marks: 91
+Course: Data Science
+Year: 3
+Age: 21
+City: Chandigarh
+
+Student ID: 207
+Name: Arpit Mishra
+Marks: 76
+Course: Computer Science
+Year: 4
+Age: 23
+City: Kanpur
+
+Student ID: 208
+Name: Sneha Nair
+Marks: 83
+Course: Biotechnology
+Year: 1
+Age: 19
+City: Kochi
+
+Student ID: 209
+Name: Vivek Jain
+Marks: 74
+Course: Information Technology
+Year: 4
+Age: 22
+City: Indore
+
+Student ID: 210
+Name: Pooja Desai
+Marks: 89
+Course: Data Science
+Year: 2
+Age: 20
+City: Mumbai
+
+Student ID: 211
+Name: Rahul Kapoor
+Marks: 67
+Course: Electronics
+Year: 3
+Age: 21
+City: Delhi
+
+Student ID: 212
+Name: Neha Agarwal
+Marks: 92
+Course: Computer Science
+Year: 1
+Age: 18
+City: Kolkata
+
+Student ID: 213
+Name: Sarthak Yadav
+Marks: 71
+Course: Mechanical Engineering
+Year: 4
+Age: 22
+City: Bhopal
+
+Student ID: 214
+Name: Isha Sharma
+Marks: 80
+Course: Civil Engineering
+Year: 2
+Age: 20
+City: Shimla
+
+Student ID: 215
+Name: Aditya Kulkarni
+Marks: 87
+Course: Data Science
+Year: 4
+Age: 23
+City: Pune
+
+Student ID: 216
+Name: Ritu Verma
+Marks: 75
+Course: Biotechnology
+Year: 1
+Age: 19
+City: Noida
+
+Student ID: 217
+Name: Mohit Saxena
+Marks: 84
+Course: Computer Science
+Year: 3
+Age: 21
+City: Ghaziabad
+
+Student ID: 218
+Name: Kavita Iyer
+Marks: 90
+Course: Information Technology
+Year: 4
+Age: 22
+City: Chennai
+
+Student ID: 219
+Name: Nikhil Bansal
+Marks: 68
+Course: Electronics
+Year: 2
+Age: 20
+City: Faridabad
+
+Student ID: 220
+Name: Tanvi Arora
+Marks: 93
+Course: Data Science
+Year: 3
+Age: 21
+City: Gurgaon
+
+Student ID: 221
+Name: Priya Mehta
+Marks: 82
+Course: Computer Science
+Year: 2
+Age: 20
+City: Surat
+
+Student ID: 222
+Name: Aman Verma
+Marks: 77
+Course: Civil Engineering
+Year: 3
+Age: 21
+City: Patna
+
+Student ID: 223
+Name: Rohit Singh
+Marks: 86
+Course: Electronics
+Year: 4
+Age: 22
+City: Varanasi
+
+Student ID: 224
+Name: Shreya Nanda
+Marks: 91
+Course: Data Science
+Year: 1
+Age: 18
+City: Bhubaneswar
+
+Student ID: 225
+Name: Karan Malhotra
+Marks: 73
+Course: Mechanical Engineering
+Year: 2
+Age: 20
+City: Amritsar
+
+Student ID: 226
+Name: Nisha Gupta
+Marks: 88
+Course: Information Technology
+Year: 3
+Age: 21
+City: Ranchi
+
+Student ID: 227
+Name: Deepak Yadav
+Marks: 66
+Course: Civil Engineering
+Year: 4
+Age: 23
+City: Gwalior
+
+Student ID: 228
+Name: Alok Tiwari
+Marks: 79
+Course: Computer Science
+Year: 1
+Age: 19
+City: Allahabad
+
+Student ID: 229
+Name: Riya Kapoor
+Marks: 94
+Course: Data Science
+Year: 2
+Age: 20
+City: Delhi
+
+Student ID: 230
+Name: Varun Jain
+Marks: 70
+Course: Electronics
+Year: 3
+Age: 21
+City: Udaipur
+
+Student ID: 231
+Name: Sanya Choudhary
+Marks: 85
+Course: Biotechnology
+Year: 4
+Age: 22
+City: Jaipur
+
+Student ID: 232
+Name: Manish Kumar
+Marks: 68
+Course: Mechanical Engineering
+Year: 2
+Age: 20
+City: Kanpur
+
+Student ID: 233
+Name: Pankaj Singh
+Marks: 72
+Course: Civil Engineering
+Year: 3
+Age: 21
+City: Lucknow
+
+Student ID: 234
+Name: Aditi Rao
+Marks: 90
+Course: Computer Science
+Year: 4
+Age: 22
+City: Bangalore
+
+Student ID: 235
+Name: Sunil Sharma
+Marks: 65
+Course: Electronics
+Year: 1
+Age: 18
+City: Delhi
+
+Student ID: 236
+Name: Kavya Iyer
+Marks: 89
+Course: Data Science
+Year: 2
+Age: 20
+City: Chennai
+
+Student ID: 237
+Name: Gaurav Arora
+Marks: 74
+Course: Mechanical Engineering
+Year: 3
+Age: 21
+City: Gurgaon
+
+Student ID: 238
+Name: Neeraj Kumar
+Marks: 81
+Course: Information Technology
+Year: 4
+Age: 22
+City: Noida
+
+Student ID: 239
+Name: Rakesh Mishra
+Marks: 69
+Course: Civil Engineering
+Year: 2
+Age: 20
+City: Patna
+
+Student ID: 240
+Name: Pooja Singh
+Marks: 92
+Course: Biotechnology
+Year: 3
+Age: 21
+City: Lucknow
+
+Student ID: 241
+Name: Harsh Vardhan
+Marks: 78
+Course: Computer Science
+Year: 4
+Age: 22
+City: Bhopal
+
+Student ID: 242
+Name: Komal Jain
+Marks: 84
+Course: Information Technology
+Year: 1
+Age: 19
+City: Indore
+
+Student ID: 243
+Name: Ajay Kumar
+Marks: 67
+Course: Electronics
+Year: 2
+Age: 20
+City: Ranchi
+
+Student ID: 244
+Name: Sonal Gupta
+Marks: 91
+Course: Data Science
+Year: 3
+Age: 21
+City: Delhi
+
+Student ID: 245
+Name: Vikram Singh
+Marks: 73
+Course: Mechanical Engineering
+Year: 4
+Age: 23
+City: Jaipur
+
+Student ID: 246
+Name: Reena Sharma
+Marks: 88
+Course: Biotechnology
+Year: 2
+Age: 20
+City: Shimla
+
+Student ID: 247
+Name: Nitin Verma
+Marks: 76
+Course: Computer Science
+Year: 3
+Age: 21
+City: Noida
+
+Student ID: 248
+Name: Alisha Khan
+Marks: 95
+Course: Data Science
+Year: 4
+Age: 22
+City: Mumbai
+
+Student ID: 249
+Name: Suresh Yadav
+Marks: 71
+Course: Civil Engineering
+Year: 1
+Age: 18
+City: Varanasi
+
+Student ID: 250
+Name: Tanya Mehta
+Marks: 87
+Course: Information Technology
+Year: 2
+Age: 20
+City: Ahmedabad

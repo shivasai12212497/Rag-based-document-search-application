@@ -7,22 +7,19 @@ import statistics
 import subprocess
 from functools import lru_cache
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.llms import Ollama
 
 # ================= CONFIG =================
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 150
 CHUNK_OVERLAP = 30
-
-OLLAMA_MODEL = "llama3.2:3b"
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 
 # ================= EMBEDDINGS =================
 @lru_cache(maxsize=1)
 def get_embeddings():
+    from langchain_community.embeddings import HuggingFaceEmbeddings
     return HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL,
         encode_kwargs={"normalize_embeddings": True},
@@ -43,270 +40,495 @@ def _resolve_model():
 
 @lru_cache(maxsize=1)
 def get_llm():
-    return Ollama(
+    from langchain_ollama import OllamaLLM
+    return OllamaLLM(
         model=_resolve_model(),
         base_url=OLLAMA_BASE_URL,
-        temperature=0.6
+        temperature=0.2  # 🔥 faster + stable
     )
 
-def _invoke(prompt):
+def cached_llm(prompt):
     return get_llm().invoke(prompt[:3500])
 
-# ================= SPLIT =================
+def _sanitize_answer(answer: str) -> str:
+    if not answer:
+        return ""
+    lines = [line for line in answer.splitlines() if not line.strip().startswith("Role:")]
+    return "\n".join(lines).strip()
+
+# ================= QUERY EXPANSION =================
+def expand_query(query: str):
+    mapping = {
+        "usa": ["new york", "san francisco"],
+        "uk": ["london", "birmingham"],
+        "uae": ["dubai"],
+        "india": ["delhi", "mumbai", "bangalore", "hyderabad"]
+    }
+
+    query_lower = query.lower()
+    expanded = [query]
+
+    for key, values in mapping.items():
+        if key in query_lower:
+            expanded.extend(values)
+
+    return " ".join(expanded)
+
+# ================= DATA EXTRACTION =================
+def parse_records(text: str):
+    records = []
+    blocks = re.split(r"\n\s*\n", text.strip())
+
+    for block in blocks:
+        record = {}
+        for line in block.splitlines():
+            if ":" in line:
+                key, value = line.split(":", 1)
+                record[key.strip().lower()] = value.strip()
+        if record:
+            records.append(record)
+
+    return records
+
+
+FIELD_SYNONYMS = {
+    "salary": ["salary", "pay", "income", "ctc"],
+    "marks": ["marks", "score", "scores", "grades"],
+    "age": ["age"],
+    "year": ["year", "class"],
+    "city": ["city", "location"],
+    "course": ["course", "branch"],
+    "department": ["department", "dept"],
+    "job role": ["job role", "role", "position"],
+}
+
+
+def get_all_keys(records):
+    keys = set()
+    for record in records:
+        keys.update(record.keys())
+    return sorted(keys)
+
+
+def to_number(value):
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def detect_field(records, query):
+    q = query.lower()
+
+    for key in records[0].keys():
+        if key.lower() in q:
+            return key
+
+    for field, words in FIELD_SYNONYMS.items():
+        if any(word in q for word in words):
+            for key in records[0].keys():
+                if field in key.lower():
+                    return key
+
+    for key in records[0].keys():
+        try:
+            float(records[0].get(key))
+            return key
+        except Exception:
+            continue
+
+    return None
+
+
+def extract_keywords(query):
+    q = query.lower()
+    stopwords = {
+        "the", "is", "in", "of", "all", "with", "as", "having",
+        "employee", "employees", "student", "students",
+        "who", "which", "show", "list", "give", "me"
+    }
+    words = re.findall(r"\w+", q)
+    return [w for w in words if w not in stopwords]
+
+
+def smart_filter(records, query):
+    stopwords = {"the", "is", "in", "of", "all", "with", "as", "having",
+                 "employee", "employees", "student", "students",
+                 "who", "which", "show", "list", "give", "me",
+                 "how", "many", "number"}
+    q_words = [word for word in query.lower().split() if len(word) > 2 and word not in stopwords]
+
+    results = []
+    for r in records:
+        text = " ".join([str(v).lower() for v in r.values()])
+
+        if all(word in text for word in q_words):
+            results.append(r)
+    return results
+
+
+def count_records(records, query):
+    q = query.lower()
+    if not any(word in q for word in ["count", "how many", "number"]):
+        return None
+
+    filtered = smart_filter(records, query)
+    if filtered:
+        return f"I found {len(filtered)} matching records."
+
+    return f"Total records: {len(records)}"
+
+
+def compare_records(records, query):
+    ids = re.findall(r"\d+", query)
+    if len(ids) < 2:
+        return None
+
+    selected = []
+    for r in records:
+        for key in r:
+            if "id" in key.lower() and str(r[key]) in ids:
+                selected.append(r)
+                break
+
+    if len(selected) < 2:
+        return None
+
+    r1, r2 = selected[:2]
+    response = "Here’s a clear comparison:\n\n"
+
+    for key in r1.keys():
+        if "id" in key.lower():
+            continue
+
+        v1 = r1.get(key)
+        v2 = r2.get(key)
+        try:
+            n1 = float(v1)
+            n2 = float(v2)
+            if n1 > n2:
+                better = r1.get("name")
+            elif n2 > n1:
+                better = r2.get("name")
+            else:
+                better = "Both are equal"
+            response += f"{key}: {v1} vs {v2} → {better} performs better\n"
+        except Exception:
+            if str(v1).lower() == str(v2).lower():
+                response += f"{key}: Both have {v1}\n"
+            else:
+                response += f"{key}: {v1} vs {v2}\n"
+    return response
+
+
+def get_name(record):
+    return next((v for k, v in record.items() if "name" in k.lower()), "This record")
+
+
+def get_max(records, query):
+    field = detect_field(records, query)
+    if not field:
+        return "Please specify what you want the maximum of."
+
+    valid = [r for r in records if to_number(r.get(field)) is not None]
+    if not valid:
+        return f"No numeric data found for {field}."
+
+    best = max(valid, key=lambda x: to_number(x.get(field)))
+    name = get_name(best)
+    return f"Among all records, {name} has the highest {field} at {best[field]}."
+
+
+def get_min(records, query):
+    field = detect_field(records, query)
+    if not field:
+        return "Please specify what you want the minimum of."
+
+    valid = [r for r in records if to_number(r.get(field)) is not None]
+    if not valid:
+        return f"No numeric data found for {field}."
+
+    best = min(valid, key=lambda x: to_number(x.get(field)))
+    name = get_name(best)
+    return f"{name} has the lowest {field}, which is {best[field]}."
+
+
+def get_avg(records, query):
+    field = detect_field(records, query)
+    if not field:
+        return "Please tell me what you want the average of (e.g., marks, age)."
+
+    values = []
+    for r in records:
+        try:
+            val = float(r.get(field))
+            values.append(val)
+        except Exception:
+            continue
+
+    if not values:
+        return f"I couldn't find numeric values for {field}."
+
+    avg = sum(values) / len(values)
+    return f"On average, the {field.lower()} across all records is about {round(avg, 2)}."
+
+
+def get_record(records, query):
+    q = query.lower()
+
+    for r in records:
+        for key in r:
+            if "id" in key and str(r[key]) in q:
+                return r
+
+        name = r.get("name", "").lower()
+        if name and any(part in q for part in name.split()):
+            return r
+
+    return None
+
+
+def humanize_record(record):
+    if not record:
+        return "I couldn’t find that record."
+
+    name = record.get("name", "This person")
+    response = f"Here’s what I found about {name}:\n\n"
+
+    for key, value in record.items():
+        response += f"• {key.title()}: {value}\n"
+
+    return response
+
+
+def format_response(record, query):
+    q = query.lower()
+    if not record:
+        return None
+
+    if any(word in q for word in ["detail", "all", "profile"]):
+        return humanize_record(record)
+
+    for key in record:
+        if key in q:
+            if "role" in key.lower():
+                return f"{record.get('name')} works as a {record[key]}."
+            return f"{record.get('name')}'s {key} is {record[key]}."
+
+    return humanize_record(record)
+
+
+def format_list(records):
+    if not records:
+        return "I couldn’t find any matching records."
+
+    response = f"I found {len(records)} matching records:\n\n"
+    for r in records:
+        name = r.get("name", "Unknown")
+        role = r.get("job role", r.get("role", ""))
+        dept = r.get("department", "")
+        loc = r.get("location", r.get("city", ""))
+        parts = [part for part in [role, dept, loc] if part]
+        details = ", ".join(parts) if parts else "No additional details"
+        response += f"• {name} ({details})\n"
+
+    return response
+
+
+def format_detailed_list(records):
+    if not records:
+        return "I couldn’t find any records."
+
+    response = f"I found {len(records)} records:\n\n"
+    for r in records:
+        details = ", ".join([f"{k}: {v}" for k, v in r.items()])
+        response += f"• {details}\n"
+    return response
+
+
+def structured_query_engine(records, query):
+    q = query.lower()
+    if not records:
+        return "No data available."
+
+    if any(word in q for word in ["who is", "about", "tell me"]):
+        record = get_record(records, query)
+        if record:
+            return humanize_record(record)
+
+    res = count_records(records, query)
+    if res:
+        return res
+
+    record = get_record(records, query)
+    if record:
+        response = format_response(record, query)
+        if response:
+            return response
+
+    if "average" in q:
+        return get_avg(records, query)
+
+    if "highest" in q:
+        return get_max(records, query)
+
+    if "lowest" in q:
+        return get_min(records, query)
+
+    filtered = smart_filter(records, query)
+    if filtered:
+        return format_list(filtered)
+
+    return "I couldn’t find a clear match. Try rephrasing."
+
+
+def detect_data_type(text):
+    lines = text.split("\n")
+    structured_count = sum(1 for line in lines if ":" in line)
+    if structured_count > 5:
+        return "structured"
+    return "unstructured"
+
+
+def is_structured_data(text):
+    return "id" in text.lower() and ":" in text and detect_data_type(text) == "structured"
+
+
+def text_search(text, query):
+    query_words = query.lower().split()
+    lines = text.split("\n")
+    matches = []
+
+    for line in lines:
+        line_lower = line.lower()
+        if any(word in line_lower for word in query_words):
+            stripped = line.strip()
+            if stripped:
+                matches.append(stripped)
+    return matches[:5]
+
+
+def answer_from_text(text, query):
+    matches = text_search(text, query)
+    if not matches:
+        return "I couldn’t find relevant information in the document."
+
+    response = "Here’s what I found in the document:\n\n"
+    for m in matches:
+        response += f"• {m}\n"
+    return response
+
+
+def query_engine(text, query):
+    data_type = detect_data_type(text)
+    if data_type == "structured":
+        records = parse_records(text)
+        return structured_query_engine(records, query)
+    return answer_from_text(text, query)
+
+
 def split_documents(documents):
+    try:
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+    except ModuleNotFoundError:
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP
+        chunk_size=800,
+        chunk_overlap=150
     )
-    return splitter.split_documents(documents)
+
+    chunks = []
+    for doc in documents:
+        blocks = [block.strip() for block in re.split(r"\n\s*\n", doc.page_content.strip()) if block.strip()]
+        if len(blocks) > 1 and all(":" in block for block in blocks):
+            chunks.extend([Document(page_content=block, metadata=doc.metadata) for block in blocks])
+            continue
+
+        chunks.extend(splitter.split_documents([doc]))
+
+    return chunks
+
+
+def normalize_query(query):
+    return query.lower().replace("air india", "").strip()
+
+
+def retrieve_relevant_chunks(query, vectorstore, k=20, score_threshold=0.5):
+    normalized_query = normalize_query(query)
+    try:
+        docs_and_scores = vectorstore.similarity_search_with_score(normalized_query, k=k)
+    except Exception:
+        return vectorstore.similarity_search(normalized_query, k=min(k, 20))[:5]
+
+    filtered_docs = []
+    for doc, score in docs_and_scores:
+        if score < score_threshold:
+            filtered_docs.append(doc)
+    return filtered_docs[:5]
+
+
+def keyword_search(query, documents):
+    query_words = [word for word in normalize_query(query).split() if word]
+    matched = []
+
+    for doc in documents:
+        text = doc.page_content.lower()
+        if any(word in text for word in query_words):
+            matched.append(doc)
+
+    return matched
+
+
+def hybrid_search(query, vectorstore):
+    all_docs = list(vectorstore.docstore._dict.values())
+    vector_results = retrieve_relevant_chunks(query, vectorstore)
+    keyword_results = keyword_search(query, all_docs)
+
+    combined = []
+    seen = set()
+    for doc in vector_results + keyword_results:
+        key = doc.page_content
+        if key not in seen:
+            seen.add(key)
+            combined.append(doc)
+            if len(combined) >= 5:
+                break
+
+    return combined
 
 # ================= VECTORSTORE =================
-def build_vectorstore_from_documents(documents, session_id=None, reset_collection=False):
+def build_vectorstore_from_documents(documents):
     chunks = split_documents(documents)
     if not chunks:
         raise ValueError("No valid content")
     return FAISS.from_documents(chunks, get_embeddings())
 
-# ================= 🔥 DATA EXTRACTION =================
-def _normalize_key(key: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", (key or "").lower()).strip()
-
-
-def _parse_json_records(text: str):
-    try:
-        payload = json.loads(text)
-    except Exception:
-        return []
-
-    if isinstance(payload, list) and payload and all(isinstance(item, dict) for item in payload):
-        return [dict(item) for item in payload]
-
-    if isinstance(payload, dict):
-        for value in payload.values():
-            if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
-                return [dict(item) for item in value]
-    return []
-
-
-def _parse_csv_records(text: str):
-    try:
-        reader = csv.reader(io.StringIO(text))
-        rows = [row for row in reader if any(cell.strip() for cell in row)]
-    except Exception:
-        return []
-
-    if len(rows) < 2:
-        return []
-
-    header = [cell.strip() for cell in rows[0]]
-    records = []
-    for row in rows[1:]:
-        if len(row) < len(header):
-            continue
-        record = {header[i]: row[i].strip() for i in range(len(header))}
-        if record:
-            records.append(record)
-    return records
-
-
-def _parse_key_value_blocks(text: str):
-    records = []
-    for block in re.split(r"\n\s*\n", text.strip()):
-        record = {}
-        for line in block.splitlines():
-            if ":" in line:
-                key, value = line.split(":", 1)
-                record[key.strip()] = value.strip()
-        if record:
-            records.append(record)
-    return records
-
-
-def extract_data(vectorstore):
-    docs = vectorstore.similarity_search("", k=100)
-    records = []
-    seen = set()
-
-    for doc in docs:
-        text = doc.page_content.strip()
-        doc_records = _parse_json_records(text)
-        if not doc_records:
-            doc_records = _parse_key_value_blocks(text)
-        if not doc_records:
-            doc_records = _parse_csv_records(text)
-
-        for record in doc_records:
-            if not record:
-                continue
-            normalized = tuple(sorted((k, v) for k, v in record.items()))
-            if normalized in seen:
-                continue
-            seen.add(normalized)
-            records.append(record)
-
-    return records
-
-
-def _numeric_value(value):
-    if value is None:
-        return None
-    try:
-        cleaned = str(value).replace(",", "").strip()
-        return float(cleaned) if "." in cleaned else int(cleaned)
-    except Exception:
-        return None
-
-
-def _score_numeric_field(field_name: str, question: str):
-    field = field_name.lower()
-    score = 0
-    if any(term in field for term in ["salary", "wage", "pay", "compensation", "amount", "price", "cost"]):
-        score += 20
-    if any(term in field for term in ["age", "years", "ageyears"]):
-        score += 18
-    if any(term in field for term in ["score", "rating", "rank", "points"]):
-        score += 16
-    if any(term in field for term in ["id", "code", "number"]):
-        score -= 5
-    if any(term in question for term in _normalize_key(field).split()):
-        score += 12
-    if "salary" in question and "salary" in field:
-        score += 25
-    if "age" in question and "age" in field:
-        score += 25
-    return score
-
-
-def _pick_numeric_field(question: str, data):
-    numeric_fields = []
-    for key in data[0].keys():
-        values = [_numeric_value(item.get(key)) for item in data]
-        if any(v is not None for v in values):
-            numeric_fields.append((key, [v for v in values if v is not None]))
-
-    if not numeric_fields:
-        return None, None
-
-    question_lower = question.lower()
-    if any(term in question_lower for term in ["count", "total", "records"]):
-        return None, None
-
-    scored = []
-    for key, values in numeric_fields:
-        if not values:
-            continue
-        scored.append((key, values, _score_numeric_field(key, question_lower)))
-
-    if not scored:
-        return numeric_fields[0][0], numeric_fields[0][1]
-
-    scored.sort(key=lambda item: item[2], reverse=True)
-    best_key, best_values, best_score = scored[0]
-
-    if best_score <= 0 and len(scored) > 1:
-        # Prefer non-ID numeric columns if question doesn't clearly specify one.
-        for key, values, score in scored:
-            if not any(term in key.lower() for term in ["id", "code", "number"]):
-                return key, values
-
-    return best_key, best_values
-
-
-def _describe_record(record):
-    for label_key in ("name", "employee", "employee id", "id", "title", "person"):
-        for key in record:
-            if _normalize_key(key) == label_key:
-                return record.get(key)
-    # fallback to first non-empty string field
-    for key, value in record.items():
-        if isinstance(value, str) and value.strip():
-            return value
-    return "record"
-
-
-def compute_analytics(question, vectorstore):
-    data = extract_data(vectorstore)
-    q = question.lower()
-
-    if not data:
-        return None
-
-    if any(term in q for term in ["count", "total", "records"]):
-        return f"Total records: {len(data)}"
-
-    key, values = _pick_numeric_field(question, data)
-    if values is None or key is None:
-        return None
-
-    if "average" in q or "mean" in q or "avg" in q:
-        return f"Average {key} is {sum(values) / len(values):.2f}"
-
-    if "median" in q:
-        return f"Median {key} is {statistics.median(values)}"
-
-    if "mode" in q:
-        try:
-            return f"Mode {key} is {statistics.mode(values)}"
-        except statistics.StatisticsError:
-            return "No unique mode found"
-
-    if any(term in q for term in ["highest", "maximum", "max", "largest", "top"]):
-        best = max(data, key=lambda x: _numeric_value(x.get(key)) or float("-inf"))
-        name = _describe_record(best)
-        return f"{name} has highest {key}: {best.get(key)}"
-
-    if any(term in q for term in ["lowest", "minimum", "min", "smallest", "least"]):
-        low = min(data, key=lambda x: _numeric_value(x.get(key)) or float("inf"))
-        name = _describe_record(low)
-        return f"{name} has lowest {key}: {low.get(key)}"
-
-    if any(term in q for term in ["difference", "diff"]):
-        return f"Difference between highest and lowest {key} is {max(values) - min(values)}"
-
-    return None
-
 # ================= RAG =================
 def rag_answer(question, vectorstore, chat_history=None):
+    all_text = "\n\n".join([doc.page_content for doc in vectorstore.docstore._dict.values()])
+    if is_structured_data(all_text):
+        records = parse_records(all_text)
+        answer = structured_query_engine(records, question)
+        return {"result": answer, "source_documents": []}
 
-    # 🔥 AUTO ANALYTICS FIRST
-    computed = compute_analytics(question, vectorstore)
-    if computed:
+    results = hybrid_search(question, vectorstore)
+    print("Retrieved Chunks:")
+    for doc in results:
+        print(doc.page_content[:200])
+
+    if not results:
         return {
-            "result": computed,
+            "result": "I checked the document, but couldn’t find a clear answer to that. Try asking in a simpler way or using keywords from the document.",
             "source_documents": []
         }
 
-    # 🔥 RAG fallback
-    docs = vectorstore.similarity_search(question, k=10)
-
-    if not docs:
-        return {
-            "result": "I couldn't find relevant information.",
-            "source_documents": []
-        }
-
-    context = "\n\n".join([d.page_content for d in docs])
-
-    history_text = ""
-    if chat_history:
-        for turn in chat_history[-3:]:
-            history_text += f"User: {turn['question']}\nAssistant: {turn['answer']}\n"
-
+    context = "\n\n".join([doc.page_content for doc in results])
     prompt = f"""
-You are an intelligent assistant working on user-provided data.
+You are a helpful assistant.
 
-STRICT RULES:
-- Answer ONLY using the given context
-- Do NOT hallucinate
-
-SPECIAL:
-- If user asks for details → give full structured answer
-
-LANGUAGE:
-- Respond in same language
-
-Conversation:
-{history_text}
+Answer ONLY using the provided context.
+If the answer is not clearly present, say you couldn’t find it.
 
 Context:
 {context}
@@ -314,40 +536,28 @@ Context:
 Question:
 {question}
 
-Answer:
+Answer in a natural, human-friendly way.
 """
 
-    answer = _invoke(prompt)
+    answer = cached_llm(prompt)
+    try:
+        answer = remove_confidence(answer)
+    except Exception:
+        pass
 
-    return {
-        "result": answer.strip(),
-        "source_documents": docs
-    }
+    return {"result": answer.strip(), "source_documents": results}
 
 # ================= CHAT =================
 def chat_answer(question, chat_history=None):
-
-    history_text = ""
-    if chat_history:
-        for turn in chat_history[-3:]:
-            history_text += f"User: {turn['question']}\nAssistant: {turn['answer']}\n"
-
     prompt = f"""
-You are a helpful assistant.
-
-- Respond naturally
-- Match user language
-
-Conversation:
-{history_text}
+You are a fast assistant.
+- Be concise
+- No unnecessary explanations
+- Do NOT include confidence score
 
 User: {question}
 Assistant:
 """
-
-    answer = _invoke(prompt)
-
-    return {
-        "result": answer.strip(),
-        "source_documents": []
-    }
+    answer = cached_llm(prompt)
+    answer = remove_confidence(answer)
+    return {"result": answer.strip(), "source_documents": []}

@@ -7,3 +7,6 @@ langchain-community
 sentence-transformers
 faiss-cpu
 ollama
+pymupdf
+langchain-ollama
+

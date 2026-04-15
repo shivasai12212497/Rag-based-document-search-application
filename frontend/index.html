@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG Assistant</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-icon">🤖</span>
+          <div>
+            <h1>RAG Assistant</h1>
+            <p>ChatGPT-style RAG interface</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <label>Mode</label>
+          <select id="mode-select">
+            <option value="normal">Normal Chat</option>
+            <option value="files">Ask From Files</option>
+            <option value="pasted">Ask From Pasted Text</option>
+          </select>
+          <p id="mode-info" class="mode-info">Normal Chat: no retrieval, direct LLM responses.</p>
+        </div>
+
+        <div id="file-section" class="panel">
+          <label>Upload documents</label>
+          <input id="file-uploader" type="file" multiple accept=".txt,.md,.csv,.log,.json" />
+          <button id="index-files-btn" class="btn secondary">Index files</button>
+        </div>
+
+        <div id="paste-section" class="panel hidden">
+          <label>Paste text/JSON</label>
+          <textarea id="paste-content" rows="6" placeholder="Paste your document content here"></textarea>
+          <input id="paste-name" type="text" placeholder="notes.txt" value="notes.txt" />
+          <button id="index-paste-btn" class="btn secondary">Index pasted content</button>
+        </div>
+
+        <div class="panel status-panel">
+          <button id="clear-history-btn" class="btn danger">Clear history</button>
+          <p>Status: <strong id="backend-status">checking...</strong></p>
+          <p><span id="session-id">Session: --</span></p>
+          <p id="processing-status" class="processing-status"></p>
+        </div>
+      </aside>
+
+      <main class="chat-area">
+        <div id="message-list" class="message-list"></div>
+        <form id="prompt-form" class="prompt-form">
+          <textarea id="prompt-text" rows="3" placeholder="Ask a question..."></textarea>
+          <button type="submit" class="btn primary">Send</button>
+        </form>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
