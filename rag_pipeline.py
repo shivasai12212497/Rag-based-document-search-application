@@ -183,46 +183,50 @@ def count_records(records, query):
     return f"Total records: {len(records)}"
 
 
-def compare_records(records, query):
-    ids = re.findall(r"\d+", query)
-    if len(ids) < 2:
-        return None
+def find_all_matches(records, query):
+    matches = []
+    query_words = set(clean_text(query).split())
 
-    selected = []
     for r in records:
-        for key in r:
-            if "id" in key.lower() and str(r[key]) in ids:
-                selected.append(r)
-                break
+        name_words = set(clean_text(r.get("name", "")).split())
+        if name_words and name_words.issubset(query_words):
+            matches.append(r)
 
-    if len(selected) < 2:
-        return None
+    return matches
 
-    r1, r2 = selected[:2]
-    response = "Here’s a clear comparison:\n\n"
+
+def compare_records(records, query):
+    matches = find_all_matches(records, query)
+    if len(matches) > 2:
+        return f"Multiple matches found: {', '.join(r.get('name', 'Unknown') for r in matches)}. Please specify exactly two records to compare."
+    if len(matches) < 2:
+        return "Could not find two matching records to compare."
+
+    r1, r2 = matches[:2]
+    response_lines = []
 
     for key in r1.keys():
         if "id" in key.lower():
             continue
 
-        v1 = r1.get(key)
-        v2 = r2.get(key)
-        try:
-            n1 = float(v1)
-            n2 = float(v2)
+        v1 = r1.get(key, "")
+        v2 = r2.get(key, "")
+        if str(v1).isdigit() and str(v2).isdigit():
+            n1 = int(v1)
+            n2 = int(v2)
             if n1 > n2:
-                better = r1.get("name")
+                response_lines.append(f"{key.title()} → {r1['name']} ({n1}) is higher than {r2['name']} ({n2})")
             elif n2 > n1:
-                better = r2.get("name")
+                response_lines.append(f"{key.title()} → {r2['name']} ({n2}) is higher than {r1['name']} ({n1})")
             else:
-                better = "Both are equal"
-            response += f"{key}: {v1} vs {v2} → {better} performs better\n"
-        except Exception:
+                response_lines.append(f"{key.title()} → Same ({n1})")
+        else:
             if str(v1).lower() == str(v2).lower():
-                response += f"{key}: Both have {v1}\n"
+                response_lines.append(f"{key.title()} → Same ({v1})")
             else:
-                response += f"{key}: {v1} vs {v2}\n"
-    return response
+                response_lines.append(f"{key.title()} → {r1['name']}: {v1}, {r2['name']}: {v2}")
+
+    return "\n".join(response_lines)
 
 
 def get_name(record):
@@ -278,18 +282,7 @@ def get_avg(records, query):
 
 
 def get_record(records, query):
-    q = query.lower()
-
-    for r in records:
-        for key in r:
-            if "id" in key and str(r[key]) in q:
-                return r
-
-        name = r.get("name", "").lower()
-        if name and any(part in q for part in name.split()):
-            return r
-
-    return None
+    return find_exact_match(records, query)
 
 
 def humanize_record(record):
@@ -350,28 +343,46 @@ def format_detailed_list(records):
     return response
 
 
+def clean_text(text):
+    return re.sub(r'[^a-z0-9 ]', '', text.lower()).strip()
+
+
+def find_exact_match(records, query):
+    query_clean = clean_text(query)
+    query_words = query_clean.split()
+
+    for r in records:
+        name_clean = clean_text(r.get("name", ""))
+        student_id = str(r.get("student id", "")).lower().strip()
+
+        if name_clean and name_clean == query_clean:
+            return r
+
+        if name_clean and all(word in query_words for word in name_clean.split()):
+            return r
+
+        if student_id and student_id in query_clean:
+            return r
+
+    return None
+
+
 def structured_query_engine(records, query):
     q = query.lower()
     if not records:
         return "No data available."
 
-    if any(word in q for word in ["who is", "about", "tell me"]):
-        record = get_record(records, query)
-        if record:
-            return humanize_record(record)
+    if "compare" in q:
+        comparison = compare_records(records, query)
+        return f"Comparison:\n\n{comparison}"
 
-    res = count_records(records, query)
-    if res:
-        return res
-
-    record = get_record(records, query)
+    record = find_exact_match(records, query)
     if record:
-        response = format_response(record, query)
-        if response:
-            return response
+        field = detect_field(records, query)
+        if field and any(term in q for term in [field] + FIELD_SYNONYMS.get(field, [])):
+            return f"{record.get('name')}\'s {field} is {record.get(field)}."
 
-    if "average" in q:
-        return get_avg(records, query)
+        return humanize_record(record)
 
     if "highest" in q:
         return get_max(records, query)
@@ -379,11 +390,23 @@ def structured_query_engine(records, query):
     if "lowest" in q:
         return get_min(records, query)
 
-    filtered = smart_filter(records, query)
-    if filtered:
-        return format_list(filtered)
+    if "average" in q:
+        return get_avg(records, query)
 
-    return "I couldn’t find a clear match. Try rephrasing."
+    if any(word in q for word in ["count", "how many", "number"]):
+        filtered = smart_filter(records, query)
+        return f"Total matching records: {len(filtered)}"
+
+    results = []
+    for r in records:
+        if any(str(v).lower() in q for v in r.values()):
+            results.append(r)
+
+    if results:
+        names = [r.get("name", "Unknown") for r in results]
+        return f"Found {len(results)} records: {', '.join(names)}"
+
+    return "No matching data found."
 
 
 def detect_data_type(text):
