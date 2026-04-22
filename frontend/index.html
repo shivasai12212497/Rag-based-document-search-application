@@ -4,11 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RAG Assistant</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23646cff'><path d='M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z'/></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
+
+    <!-- Particle canvas background (hidden during chat) -->
+    <canvas id="bg-canvas"></canvas>
+
     <div class="container">
 
       <!-- ══ Sidebar ══ -->
@@ -18,7 +23,6 @@
           <!-- Brand -->
           <div class="brand">
             <div class="brand-icon">
-              <!-- Sparkle / AI icon -->
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
               </svg>
@@ -30,10 +34,7 @@
                 Retrieval-augmented chat
               </p>
             </div>
-
-            <!-- Theme toggle -->
-            <button class="theme-toggle" id="theme-toggle" title="Toggle light / dark mode" aria-label="Toggle theme">
-              <!-- Sun pill -->
+            <button class="theme-toggle" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
               <div class="theme-toggle-pill light-pill" id="light-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
@@ -42,7 +43,6 @@
                   <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
                 </svg>
               </div>
-              <!-- Moon pill -->
               <div class="theme-toggle-pill dark-pill active" id="dark-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
@@ -68,10 +68,19 @@
           <!-- File Upload -->
           <div id="file-section" class="panel">
             <span class="panel-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               Upload Documents
             </span>
-            <input id="file-uploader" type="file" multiple accept=".txt,.md,.csv,.log,.json" />
+            <div class="file-drop-zone" id="file-drop-zone">
+              <input id="file-uploader" type="file" multiple accept=".txt,.md,.csv,.log,.json" />
+              <div class="file-drop-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Drop files or <span>browse</span>
+                <div class="file-name-display" id="file-name-display">—</div>
+              </div>
+            </div>
             <button id="index-files-btn" class="btn secondary">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               Index files
@@ -87,7 +96,7 @@
             <textarea id="paste-content" rows="5" placeholder="Paste your document content here…"></textarea>
             <input id="paste-name" type="text" placeholder="notes.txt" value="notes.txt" />
             <button id="index-paste-btn" class="btn secondary">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/></svg>
               Index pasted content
             </button>
           </div>
@@ -98,22 +107,17 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
               Clear history
             </button>
-
             <div class="status-row">
-              <span>
-                <span class="status-dot" id="status-dot"></span>Backend
-              </span>
+              <span><span class="status-dot" id="status-dot"></span>Backend</span>
               <span id="backend-status">checking…</span>
             </div>
-
             <div class="status-row">
               <span id="session-id">Session: --</span>
             </div>
-
             <p id="processing-status" class="processing-status"></p>
           </div>
 
-        </div><!-- /sidebar-inner -->
+        </div>
       </aside>
 
       <!-- ══ Chat ══ -->
@@ -133,18 +137,138 @@
         </div>
 
         <div id="message-list" class="message-list">
+          <!-- ══ WELCOME STATE ══ -->
           <div class="empty-state" id="empty-state">
-            <div class="empty-state-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+
+            <!-- Creative RAG illustration -->
+            <div class="es-hero" aria-hidden="true">
+              <svg class="es-art-svg" viewBox="0 0 300 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="coreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#00d4aa"/>
+                    <stop offset="100%" stop-color="#0099ff"/>
+                  </linearGradient>
+                  <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#00d4aa" stop-opacity="0.8"/>
+                    <stop offset="100%" stop-color="#0099ff" stop-opacity="0.3"/>
+                  </linearGradient>
+                  <linearGradient id="nodeGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#00d4aa"/>
+                    <stop offset="100%" stop-color="#0099ff"/>
+                  </linearGradient>
+                  <linearGradient id="nodeGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#0099ff"/>
+                    <stop offset="100%" stop-color="#7b61ff"/>
+                  </linearGradient>
+                  <linearGradient id="nodeGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#7b61ff"/>
+                    <stop offset="100%" stop-color="#00d4aa"/>
+                  </linearGradient>
+                  <filter id="glow">
+                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                    <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                </defs>
+
+                <!-- Outer rings -->
+                <circle cx="150" cy="110" r="100" stroke="url(#ringGrad)" stroke-width=".8" stroke-dasharray="5 4" opacity="0.28"/>
+                <circle cx="150" cy="110" r="72" stroke="url(#ringGrad)" stroke-width=".6" stroke-dasharray="3 5" opacity="0.18"/>
+
+                <!-- Core sphere -->
+                <circle cx="150" cy="110" r="32" fill="url(#coreGrad)" opacity="0.9" filter="url(#glow)"/>
+                <circle cx="150" cy="110" r="32" stroke="url(#ringGrad)" stroke-width="1.2" opacity="0.55"/>
+                <!-- Star icon in core -->
+                <path d="M150 96l2.8 8.5h9l-7.2 5.2 2.8 8.5-7.4-5.4-7.4 5.4 2.8-8.5-7.2-5.2h9z" fill="white" opacity="0.95"/>
+
+                <!-- Orbit node 1 — Document -->
+                <g class="orbit-node" style="transform-origin:150px 110px">
+                  <circle cx="150" cy="18" r="17" fill="url(#nodeGrad1)" opacity="0.9"/>
+                  <rect x="143" y="12" width="14" height="1.8" rx=".9" fill="white" opacity="0.8"/>
+                  <rect x="143" y="15.5" width="10" height="1.8" rx=".9" fill="white" opacity="0.6"/>
+                  <rect x="143" y="19" width="12" height="1.8" rx=".9" fill="white" opacity="0.6"/>
+                  <rect x="143" y="22.5" width="8" height="1.8" rx=".9" fill="white" opacity="0.45"/>
+                </g>
+
+                <!-- Orbit node 2 — Database -->
+                <g class="orbit-node-2" style="transform-origin:150px 110px">
+                  <circle cx="248" cy="58" r="17" fill="url(#nodeGrad2)" opacity="0.9"/>
+                  <ellipse cx="248" cy="54" rx="8" ry="3" stroke="white" stroke-width="1.2" fill="none" opacity="0.8"/>
+                  <rect x="240" y="54" width="16" height="6" fill="none" stroke="white" stroke-width="1.2" opacity="0.7"/>
+                  <ellipse cx="248" cy="60" rx="8" ry="3" stroke="white" stroke-width="1.2" fill="none" opacity="0.8"/>
+                </g>
+
+                <!-- Orbit node 3 — Search -->
+                <g class="orbit-node-3" style="transform-origin:150px 110px">
+                  <circle cx="248" cy="162" r="17" fill="url(#nodeGrad3)" opacity="0.9"/>
+                  <circle cx="246" cy="160" r="6" stroke="white" stroke-width="1.4" fill="none" opacity="0.85"/>
+                  <path d="M250.5 164.5l4 4" stroke="white" stroke-width="1.6" stroke-linecap="round" opacity="0.85"/>
+                </g>
+
+                <!-- Orbit node 4 — AI Chip -->
+                <g class="orbit-node-4" style="transform-origin:150px 110px">
+                  <circle cx="150" cy="202" r="17" fill="url(#nodeGrad1)" opacity="0.9"/>
+                  <rect x="144" y="104" width="12" height="12" rx="2" stroke="white" stroke-width="1.3" fill="none" opacity="0.85" transform="translate(0,96)"/>
+                  <line x1="148" y1="198" x2="148" y2="204" stroke="white" stroke-width="1" opacity="0.7"/>
+                  <line x1="152" y1="198" x2="152" y2="204" stroke="white" stroke-width="1" opacity="0.7"/>
+                  <line x1="144" y1="202" x2="150" y2="202" stroke="white" stroke-width="1" opacity="0.7"/>
+                  <line x1="150" y1="202" x2="156" y2="202" stroke="white" stroke-width="1" opacity="0.7"/>
+                </g>
+
+                <!-- Orbit node 5 — Code -->
+                <g class="orbit-node-5" style="transform-origin:150px 110px">
+                  <circle cx="52" cy="58" r="17" fill="url(#nodeGrad2)" opacity="0.9"/>
+                  <path d="M47 55l-5 3 5 3" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.85"/>
+                  <path d="M53 55l5 3-5 3" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.85"/>
+                </g>
+
+                <!-- Connector lines (pulse) -->
+                <line class="pulse-line" x1="150" y1="35" x2="150" y2="78" stroke="url(#ringGrad)" stroke-width=".8" opacity=".4"/>
+                <line class="pulse-line" x1="231" y1="70" x2="181" y2="95" stroke="url(#ringGrad)" stroke-width=".8" opacity=".4"/>
+                <line class="pulse-line" x1="231" y1="150" x2="182" y2="124" stroke="url(#ringGrad)" stroke-width=".8" opacity=".4"/>
+                <line class="pulse-line" x1="150" y1="185" x2="150" y2="142" stroke="url(#ringGrad)" stroke-width=".8" opacity=".4"/>
+                <line class="pulse-line" x1="69" y1="70" x2="119" y2="95" stroke="url(#ringGrad)" stroke-width=".8" opacity=".4"/>
+
+                <!-- Floating accent dots -->
+                <circle class="float-dot"   cx="88"  cy="165" r="3.5" fill="#00d4aa" opacity=".55"/>
+                <circle class="float-dot-2" cx="216" cy="42"  r="2.5" fill="#0099ff" opacity=".45"/>
+                <circle class="float-dot-3" cx="62"  cy="148" r="2"   fill="#7b61ff" opacity=".4"/>
               </svg>
             </div>
-            <p>Choose a mode in the sidebar, then ask any question to get started.</p>
+
+            <!-- Text block -->
+            <div class="es-text-block">
+              <h2 class="es-headline">
+                <span class="es-word" style="--d:.05s">Ask</span>
+                <span class="es-word" style="--d:.12s"><span class="es-accent">Anything.</span></span>
+                <span class="es-word" style="--d:.19s">Grounded</span>
+                <span class="es-word" style="--d:.26s">in</span>
+                <span class="es-word" style="--d:.33s"><span class="es-accent2">Your Data.</span></span>
+              </h2>
+              <p class="es-sub">
+                <span id="es-typewriter"></span><span class="es-cursor">|</span>
+              </p>
+              <div class="es-badges">
+                <span class="es-badge">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 1l1.6 4.9H15l-4.1 3 1.6 4.9L8 11.3 3.5 13.8l1.6-4.9L1 5.9h5.4z"/></svg>
+                  Semantic search
+                </span>
+                <span class="es-badge">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 9.3A6 6 0 117.4 2"/><path d="M14 2l-6 6"/><path d="M10 2h4v4"/></svg>
+                  Retrieval-augmented
+                </span>
+                <span class="es-badge">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><path d="M9 11.5h5M11.5 9v5"/></svg>
+                  Multi-source
+                </span>
+              </div>
+            </div>
+
           </div>
         </div>
 
         <form id="prompt-form" class="prompt-form">
-          <textarea id="prompt-text" rows="2" placeholder="Ask a question… (Enter to send, Shift+Enter for new line)"></textarea>
+          <span class="prompt-hint">Enter ↵ to send</span>
+          <textarea id="prompt-text" rows="2" placeholder="Ask a question… (Enter ↵ to send, Shift+Enter for new line)"></textarea>
           <button type="submit" class="btn primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -157,5 +281,192 @@
     </div>
 
     <script src="/static/app.js"></script>
+    <script>
+    /* ── Typewriter ── */
+    (function(){
+      const phrases=[
+        'Upload a file and ask questions about it.',
+        'Paste text and get grounded answers instantly.',
+        'Search semantically across multiple documents.',
+        'No hallucinations — answers backed by your data.',
+        'Choose a mode in the sidebar to begin.',
+      ];
+      let pi=0,ci=0,del=false;
+      const el=document.getElementById('es-typewriter');
+      if(!el)return;
+      function tick(){
+        const p=phrases[pi];
+        if(!del){
+          el.textContent=p.slice(0,++ci);
+          if(ci===p.length){del=true;setTimeout(tick,2400);return;}
+          setTimeout(tick,36);
+        } else {
+          el.textContent=p.slice(0,--ci);
+          if(ci===0){del=false;pi=(pi+1)%phrases.length;setTimeout(tick,350);return;}
+          setTimeout(tick,16);
+        }
+      }
+      setTimeout(tick,900);
+    })();
+
+    /* ── Particle canvas ── */
+    (function(){
+      const canvas=document.getElementById('bg-canvas');
+      if(!canvas)return;
+      const ctx=canvas.getContext('2d');
+      let W,H,particles=[];
+      const COUNT=55;
+      function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+      resize();
+      window.addEventListener('resize',resize);
+      function isDark(){return document.documentElement.getAttribute('data-theme')==='dark'}
+      function mkParticle(){
+        return{
+          x:Math.random()*W,y:Math.random()*H,
+          r:Math.random()*1.8+.4,
+          vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,
+          alpha:Math.random()*.5+.15,
+          color:['#00d4aa','#0099ff','#7b61ff'][Math.floor(Math.random()*3)]
+        };
+      }
+      for(let i=0;i<COUNT;i++)particles.push(mkParticle());
+      function draw(){
+        ctx.clearRect(0,0,W,H);
+        const dark=isDark();
+        for(let i=0;i<particles.length;i++){
+          for(let j=i+1;j<particles.length;j++){
+            const dx=particles[i].x-particles[j].x,dy=particles[i].y-particles[j].y;
+            const d=Math.sqrt(dx*dx+dy*dy);
+            if(d<110){
+              ctx.beginPath();ctx.moveTo(particles[i].x,particles[i].y);ctx.lineTo(particles[j].x,particles[j].y);
+              ctx.strokeStyle=`rgba(0,212,170,${(1-d/110)*(dark?.12:.07)})`;ctx.lineWidth=.6;ctx.stroke();
+            }
+          }
+        }
+        particles.forEach(p=>{
+          p.x+=p.vx;p.y+=p.vy;
+          if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;
+          ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+          ctx.fillStyle=p.color;ctx.globalAlpha=p.alpha*(dark?1:.6);
+          ctx.fill();ctx.globalAlpha=1;
+        });
+        requestAnimationFrame(draw);
+      }
+      draw();
+    })();
+
+    /* ── Drag-drop file zone ── */
+    (function(){
+      const zone=document.getElementById('file-drop-zone');
+      const input=document.getElementById('file-uploader');
+      const display=document.getElementById('file-name-display');
+      if(!zone||!input)return;
+      zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag-over')});
+      zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
+      zone.addEventListener('drop',e=>{
+        e.preventDefault();zone.classList.remove('drag-over');
+        const dt=new DataTransfer();
+        Array.from(e.dataTransfer.files).forEach(f=>dt.items.add(f));
+        input.files=dt.files;showFiles(dt.files);
+      });
+      input.addEventListener('change',()=>showFiles(input.files));
+      function showFiles(files){
+        if(!files||!files.length){display.classList.remove('visible');return;}
+        display.textContent=Array.from(files).map(f=>f.name).join(', ');
+        display.classList.add('visible');
+      }
+    })();
+
+    /* ══════════════════════════════════════════════
+       OVERRIDE addMessage — two-way bubble layout
+       Avatar icon + single sender label only
+    ══════════════════════════════════════════════ */
+    (function(){
+
+      /* SVG icons for avatars */
+      const USER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+      const AI_ICON   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>`;
+
+      function makeWrapper(text, sender, options) {
+        if (!text) return null;
+
+        /* Activate chat background on first real message */
+        if (!options || !options.placeholder) {
+          document.body.classList.add('chat-active');
+        }
+
+        const isUser = sender === 'user';
+        const msgList = document.getElementById('message-list');
+        if (!msgList) return null;
+
+        /* Remove welcome empty-state */
+        const es = document.getElementById('empty-state');
+        if (es) es.remove();
+
+        /* Outer wrapper */
+        const wrapper = document.createElement('div');
+        wrapper.className = `message-wrapper ${sender}`;
+
+        /* ── Label row: avatar icon + name ── */
+        const labelRow = document.createElement('div');
+        labelRow.className = 'msg-label-row';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'msg-avatar';
+        avatar.innerHTML = isUser ? USER_ICON : AI_ICON;
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'msg-sender-name';
+        nameEl.textContent = isUser ? 'You' : 'RAG Assistant';
+
+        labelRow.appendChild(avatar);
+        labelRow.appendChild(nameEl);
+
+        /* ── Message bubble ── */
+        const bubble = document.createElement('div');
+        bubble.className = `message ${sender}`;
+        if (options && options.placeholder) bubble.classList.add('placeholder');
+        bubble.textContent = text;
+
+        wrapper.appendChild(labelRow);
+        wrapper.appendChild(bubble);
+        msgList.appendChild(wrapper);
+        msgList.scrollTop = msgList.scrollHeight;
+
+        return bubble;
+      }
+
+      window.addMessage = function(text, sender = 'assistant', options = {}) {
+        const bubble = makeWrapper(text, sender, options);
+        if (bubble && (!options || !options.placeholder)) {
+          const el = document.getElementById('msg-count');
+          const current = parseInt((el && el.textContent) || '0') || 0;
+          if (el) el.textContent = `${current + 1} message${current + 1 !== 1 ? 's' : ''}`;
+        }
+        return bubble;
+      };
+    })();
+
+    /* ── Override showEmptyState to reset chat-active ── */
+    (function(){
+      const _origClear = window.clearHistory;
+      window.clearHistory = function() {
+        document.body.classList.remove('chat-active');
+        const msgList = document.getElementById('message-list');
+        if (msgList) msgList.innerHTML = '';
+        // Restore empty state
+        const es = document.createElement('div');
+        es.className = 'empty-state';
+        es.id = 'empty-state';
+        es.innerHTML = `
+          <div style="font-family:var(--font-mono);font-size:.8rem;color:var(--text-muted);text-align:center;">
+            History cleared. Start a new conversation below.
+          </div>`;
+        msgList.appendChild(es);
+        const el = document.getElementById('msg-count');
+        if (el) el.textContent = '0 messages';
+      };
+    })();
+    </script>
   </body>
 </html>
