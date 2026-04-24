@@ -4,6 +4,7 @@ import threading
 import uuid
 
 from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
 from langchain_core.documents import Document
 from werkzeug.utils import secure_filename
 
@@ -25,7 +26,8 @@ app = Flask(
     static_folder=static_dir,
 )
 
-_session_lock = threading.Lock()
+# Enable CORS for ngrok tunneling
+CORS(app)
 _session_vectorstores = {}
 _session_histories = {}
 
@@ -204,4 +206,4 @@ def static_files(path):
 
 
 if __name__ == "__main__":
-    app.run(port=DEFAULT_PORT, debug=False)
+    app.run(host="0.0.0.0", port=DEFAULT_PORT, debug=False)

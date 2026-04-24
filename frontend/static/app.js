@@ -1,4 +1,4 @@
-const backend = window.location.origin;
+const backend = "https://emphasize-untaxed-statutory.ngrok-free.dev";
 
 const dom = {
   modeSelect: document.getElementById('mode-select'),
