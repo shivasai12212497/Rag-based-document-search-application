@@ -243,6 +243,7 @@ input[type=text]::placeholder,textarea::placeholder{color:var(--text-dim)}
 
 .status-panel{margin-top:auto;display:flex;flex-direction:column;gap:.5rem;padding-top:.8rem;border-top:1px solid var(--border)}
 .status-row{display:flex;align-items:center;justify-content:space-between;font-size:.72rem;color:var(--text-muted);font-family:var(--font-mono);padding:.25rem 0}
+.history-empty{font-size:.72rem;color:var(--text-muted);font-family:var(--font-mono);padding:.35rem 0}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-dim);margin-right:.38rem;transition:background .3s}
 .status-dot.online{background:#00d4aa;box-shadow:0 0 0 3px rgba(0,212,170,.22)}
 .status-dot.error {background:var(--danger);box-shadow:0 0 0 3px rgba(255,107,107,.22)}

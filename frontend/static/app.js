@@ -17,10 +17,20 @@ const dom = {
   sessionId: document.getElementById('session-id'),
   processingStatus: document.getElementById('processing-status'),
   sendButton: document.querySelector('#prompt-form button[type=submit]'),
+  chatHistoryList: document.getElementById('chat-history-list'),
+  downloadChatBtn: document.getElementById('download-chat-btn'),
 };
+
+window.__ragMessageRenderingManagedInApp = true;
+window.__ragHistoryManagedInApp = true;
 
 let isProcessing = false;
 let messageCount = 0;
+const CHAT_HISTORY_KEY = 'rag_all_chats';
+let chatStore = readChatStore();
+
+const USER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+const AI_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>`;
 
 /* ── Session ─────────────────────────────────────────── */
 let sessionId = localStorage.getItem('rag_session_id') || '';
@@ -28,12 +38,283 @@ function setActiveSession(id) {
   if (!id) return;
   sessionId = id;
   localStorage.setItem('rag_session_id', sessionId);
-  dom.sessionId.textContent = `Session: ${sessionId.slice(0, 8)}…`;
+  dom.sessionId.textContent = `Session: ${sessionId.slice(0, 8)}...`;
+  migrateLegacyHistoryForSession();
+  renderHistory();
 }
 if (!sessionId) {
   setActiveSession(crypto.randomUUID ? crypto.randomUUID() : `sess_${Date.now()}`);
 } else {
-  dom.sessionId.textContent = `Session: ${sessionId.slice(0, 8)}…`;
+  dom.sessionId.textContent = `Session: ${sessionId.slice(0, 8)}...`;
+}
+
+/* Chat history */
+function readChatStore() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+    const { store, changed } = repairChatStore(parsed);
+    if (changed) {
+      localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(store));
+    }
+    return store;
+  } catch {
+    return {};
+  }
+}
+
+function saveChatStore() {
+  const repaired = repairChatStore(chatStore);
+  chatStore = repaired.store;
+  localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatStore));
+  renderHistory();
+}
+
+function normalizeHistoryEntry(message) {
+  if (!message || typeof message !== 'object') return null;
+
+  const text = String(message.text || '').trim();
+  if (!text) return null;
+
+  const role = message.role === 'user' ? 'user' : 'assistant';
+  const entry = {
+    ...message,
+    role,
+    text,
+  };
+
+  if (Array.isArray(entry.sources)) {
+    entry.sources = normalizeSources(entry.sources);
+  }
+
+  return entry;
+}
+
+function historyKey(message) {
+  return `${message.role}\u001f${message.text.trim().toLowerCase()}`;
+}
+
+function sameHistoryBlock(messages, leftStart, rightStart, length) {
+  for (let offset = 0; offset < length; offset += 1) {
+    if (historyKey(messages[leftStart + offset]) !== historyKey(messages[rightStart + offset])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function compactRepeatedHistory(messages) {
+  const compacted = [];
+  let index = 0;
+
+  while (index < messages.length) {
+    let bestBlockSize = 0;
+    let bestRepeats = 1;
+    const maxBlockSize = Math.min(30, Math.floor((messages.length - index) / 3));
+
+    for (let blockSize = 1; blockSize <= maxBlockSize; blockSize += 1) {
+      let repeats = 1;
+      while (
+        index + ((repeats + 1) * blockSize) <= messages.length &&
+        sameHistoryBlock(messages, index, index + (repeats * blockSize), blockSize)
+      ) {
+        repeats += 1;
+      }
+
+      if (repeats >= 3 && repeats * blockSize > bestRepeats * bestBlockSize) {
+        bestBlockSize = blockSize;
+        bestRepeats = repeats;
+      }
+    }
+
+    if (bestBlockSize) {
+      const repeatedBlock = messages.slice(index, index + bestBlockSize);
+      const isCorruptedUserOnlyBlock = bestRepeats >= 5 && repeatedBlock.every((message) => message.role === 'user');
+
+      if (!isCorruptedUserOnlyBlock) {
+        compacted.push(...repeatedBlock);
+      }
+      index += bestBlockSize * bestRepeats;
+    } else {
+      compacted.push(messages[index]);
+      index += 1;
+    }
+  }
+
+  return compacted;
+}
+
+function repairChatStore(store) {
+  const repaired = {};
+  let changed = false;
+
+  Object.entries(store).forEach(([id, messages]) => {
+    if (!Array.isArray(messages)) {
+      changed = true;
+      return;
+    }
+
+    const normalized = messages.map(normalizeHistoryEntry).filter(Boolean);
+    const compacted = compactRepeatedHistory(normalized);
+    repaired[id] = compacted;
+
+    if (compacted.length !== messages.length || normalized.length !== messages.length) {
+      changed = true;
+    }
+  });
+
+  return { store: repaired, changed };
+}
+
+function migrateLegacyHistoryForSession() {
+  if (!sessionId) return;
+  const shortId = sessionId.slice(0, 8);
+  if (!chatStore[shortId]) return;
+
+  chatStore[sessionId] = [
+    ...(chatStore[sessionId] || []),
+    ...chatStore[shortId],
+  ];
+  delete chatStore[shortId];
+  saveChatStore();
+}
+
+function normalizeSources(sources) {
+  if (!Array.isArray(sources)) return [];
+  return sources.map((source) => ({
+    title: source.metadata?.source || source.metadata?.file_name || source.metadata?.source_name || 'unknown',
+    snippet: (source.content || source.page_content || '').slice(0, 300),
+    content: source.content || source.page_content || '',
+    metadata: source.metadata || {},
+  }));
+}
+
+function saveChatMessage(role, text, options = {}) {
+  const cleanedText = (text || '').trim();
+  if (!cleanedText || !sessionId) return;
+
+  const entry = {
+    role,
+    text: cleanedText,
+    mode: options.mode || dom.modeSelect.value,
+    created_at: new Date().toISOString(),
+  };
+
+  const sources = normalizeSources(options.sources);
+  if (sources.length) entry.sources = sources;
+
+  chatStore[sessionId] = [...(chatStore[sessionId] || []), entry];
+  saveChatStore();
+}
+
+function renderHistory() {
+  if (!dom.chatHistoryList) return;
+
+  const sessionIds = Object.keys(chatStore)
+    .filter((id) => Array.isArray(chatStore[id]) && chatStore[id].length > 0)
+    .sort((a, b) => {
+      const aMessages = chatStore[a];
+      const bMessages = chatStore[b];
+      const aLast = aMessages[aMessages.length - 1]?.created_at || '';
+      const bLast = bMessages[bMessages.length - 1]?.created_at || '';
+      return bLast.localeCompare(aLast);
+    });
+
+  dom.chatHistoryList.innerHTML = '';
+
+  if (!sessionIds.length) {
+    const empty = document.createElement('div');
+    empty.className = 'history-empty';
+    empty.textContent = 'No saved chats yet.';
+    dom.chatHistoryList.appendChild(empty);
+    return;
+  }
+
+  sessionIds.forEach((id) => {
+    const messages = chatStore[id];
+    const btn = document.createElement('button');
+    btn.className = 'btn secondary';
+    btn.type = 'button';
+    btn.style.width = '100%';
+    btn.style.marginBottom = '5px';
+    btn.title = id;
+    btn.textContent = `${id.slice(0, 8)}... (${messages.length})`;
+    btn.addEventListener('click', () => loadChat(id));
+    dom.chatHistoryList.appendChild(btn);
+  });
+}
+
+function loadChat(id) {
+  const messages = chatStore[id] || [];
+  setActiveSession(id);
+  dom.messageList.innerHTML = '';
+  setMessageCount(0);
+  document.body.classList.toggle('chat-active', messages.length > 0);
+
+  if (!messages.length) {
+    showEmptyState();
+    return;
+  }
+
+  messages.forEach((message) => {
+    addMessage(message.text, message.role || 'assistant', { skipHistory: true });
+    if (message.role === 'assistant' && Array.isArray(message.sources) && message.sources.length) {
+      addSourceBlock(message.sources);
+    }
+  });
+}
+
+function formatChatTranscript(id, messages) {
+  const lines = [
+    `Session: ${id}`,
+    `Exported: ${new Date().toLocaleString()}`,
+    '',
+  ];
+
+  messages.forEach((message) => {
+    lines.push(`${(message.role || 'assistant').toUpperCase()}:`);
+    lines.push(message.text || '');
+
+    if (Array.isArray(message.sources) && message.sources.length) {
+      lines.push('');
+      lines.push('SOURCES:');
+      message.sources.forEach((source, index) => {
+        lines.push(`${index + 1}. ${source.title || 'unknown'}`);
+        if (source.snippet) lines.push(`   ${source.snippet}`);
+      });
+    }
+
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
+function downloadCurrentChat() {
+  const repaired = repairChatStore(chatStore);
+  if (repaired.changed) {
+    chatStore = repaired.store;
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatStore));
+    renderHistory();
+  }
+
+  const messages = chatStore[sessionId] || [];
+  if (!messages.length) {
+    alert('No chat to download.');
+    return;
+  }
+
+  const blob = new Blob([formatChatTranscript(sessionId, messages)], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safeId = (sessionId || 'session').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
+  link.href = url;
+  link.download = `chat_${safeId}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /* ── Theme toggle ─────────────────────────────────────── */
@@ -62,10 +343,14 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
 });
 
 /* ── Message counter ──────────────────────────────────── */
-function updateMsgCount(delta) {
-  messageCount += delta;
+function setMessageCount(value) {
+  messageCount = Math.max(0, value);
   const el = document.getElementById('msg-count');
   if (el) el.textContent = `${messageCount} message${messageCount !== 1 ? 's' : ''}`;
+}
+
+function updateMsgCount(delta) {
+  setMessageCount(messageCount + delta);
 }
 
 /* ── Mode ─────────────────────────────────────────────── */
@@ -131,13 +416,40 @@ function showEmptyState() {
 /* ── Add message ──────────────────────────────────────── */
 function addMessage(text, sender = 'assistant', options = {}) {
   if (!text) return null;
+  if (!options.placeholder) {
+    document.body.classList.add('chat-active');
+  }
+
   hideEmptyState();
+
+  const isUser = sender === 'user';
+  const wrapper = document.createElement('div');
+  wrapper.className = `message-wrapper ${sender}`;
+
+  const labelRow = document.createElement('div');
+  labelRow.className = 'msg-label-row';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.innerHTML = isUser ? USER_ICON : AI_ICON;
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'msg-sender-name';
+  nameEl.textContent = isUser ? 'You' : 'RAG Assistant';
+
+  labelRow.appendChild(avatar);
+  labelRow.appendChild(nameEl);
+
   const message = document.createElement('div');
   message.className = `message ${sender}`;
   if (options.placeholder) message.classList.add('placeholder');
   message.textContent = text;
-  dom.messageList.appendChild(message);
+
+  wrapper.appendChild(labelRow);
+  wrapper.appendChild(message);
+  dom.messageList.appendChild(wrapper);
   dom.messageList.scrollTop = dom.messageList.scrollHeight;
+
   if (!options.placeholder) updateMsgCount(1);
   return message;
 }
@@ -151,6 +463,15 @@ function setProcessing(active) {
 }
 
 /* ── Source block ─────────────────────────────────────── */
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function addSourceBlock(sources) {
   hideEmptyState();
   const block = document.createElement('div');
@@ -164,12 +485,12 @@ function addSourceBlock(sources) {
     </div>
     <div class="source-list hidden">
       ${sources.map((s, i) => {
-        const title = s.metadata?.source || s.metadata?.file_name || s.metadata?.source_name || 'unknown';
-        const snippet = (s.content || s.page_content || '').slice(0, 200);
+        const title = s.title || s.metadata?.source || s.metadata?.file_name || s.metadata?.source_name || 'unknown';
+        const snippet = (s.snippet || s.content || s.page_content || '').slice(0, 200);
         return `
         <div class="source-item">
-          <div class="source-title">${i + 1}. ${title}</div>
-          <div class="source-snippet">${snippet}…</div>
+          <div class="source-title">${i + 1}. ${escapeHtml(title)}</div>
+          <div class="source-snippet">${escapeHtml(snippet)}...</div>
         </div>
       `;
       }).join('')}
@@ -215,6 +536,7 @@ async function askQuestion(question) {
   }
 
   addMessage(question, 'user');
+  saveChatMessage('user', question);
   setProcessing(true);
   const placeholder = addMessage('Thinking…', 'assistant', { placeholder: true });
 
@@ -223,6 +545,7 @@ async function askQuestion(question) {
 
     if (endpoint === 'ask' && !sessionId) {
       if (placeholder) placeholder.textContent = 'Error: please index files or pasted text first before asking in retrieval mode.';
+      saveChatMessage('assistant', 'Error: please index files or pasted text first before asking in retrieval mode.');
       setProcessing(false);
       return;
     }
@@ -239,6 +562,7 @@ async function askQuestion(question) {
       payload = JSON.parse(text);
     } catch {
       if (placeholder) placeholder.textContent = 'Error: Server returned invalid JSON.';
+      saveChatMessage('assistant', 'Error: Server returned invalid JSON.');
       setProcessing(false);
       return { error: 'Server returned invalid JSON.' };
     }
@@ -246,6 +570,7 @@ async function askQuestion(question) {
     if (!response.ok) {
       const errorText = payload.error || payload.message || 'Request failed';
       if (placeholder) placeholder.textContent = `Error: ${errorText}`;
+      saveChatMessage('assistant', `Error: ${errorText}`);
       setProcessing(false);
       return payload;
     }
@@ -259,11 +584,13 @@ async function askQuestion(question) {
 
     const sources = payload.sources || payload.source_documents || [];
     if (Array.isArray(sources) && sources.length > 0) addSourceBlock(sources);
+    saveChatMessage('assistant', answer, { sources });
 
     setProcessing(false);
     return payload;
   } catch (error) {
     if (placeholder) placeholder.textContent = `Error: ${error.message}`;
+    saveChatMessage('assistant', `Error: ${error.message}`);
     setProcessing(false);
     return { error: error.message };
   }
@@ -342,8 +669,10 @@ async function indexPastedText() {
 /* ── Clear history ────────────────────────────────────── */
 function clearHistory() {
   dom.messageList.innerHTML = '';
-  messageCount = 0;
-  updateMsgCount(0);
+  setMessageCount(0);
+  document.body.classList.remove('chat-active');
+  delete chatStore[sessionId];
+  saveChatStore();
   showEmptyState();
 }
 
@@ -373,7 +702,10 @@ function init() {
   dom.indexFilesBtn.addEventListener('click', indexFiles);
   dom.indexPasteBtn.addEventListener('click', indexPastedText);
   dom.clearHistoryBtn.addEventListener('click', clearHistory);
+  if (dom.downloadChatBtn) dom.downloadChatBtn.addEventListener('click', downloadCurrentChat);
 
+  migrateLegacyHistoryForSession();
+  renderHistory();
   updateBackendHealth();
   setInterval(updateBackendHealth, 15000);
 }
